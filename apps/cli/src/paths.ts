@@ -7,8 +7,9 @@ export const repositoryRoot = fileURLToPath(
 
 export const resolveSqlitePath = (
   value: string | undefined,
-  cwd: string
+  cwd: string,
+  defaultFilename = "payky.db"
 ): string =>
   value === undefined
-    ? resolve(repositoryRoot, ".data/payky.db")
+    ? resolve(repositoryRoot, ".data", defaultFilename)
     : resolve(cwd, value)

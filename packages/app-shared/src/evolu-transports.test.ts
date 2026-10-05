@@ -12,10 +12,14 @@ import type {
   SyncState,
   SyncTransport,
 } from "@evolu/common/local-first"
-import { appOwnerIdPlaceholder } from "@payky/core/evolu/device-account"
+import {
+  appOwnerIdPlaceholder,
+  defaultEvoluTransportUrls,
+} from "@payky/core/evolu/device-account"
 import { describe, expect, test } from "vitest"
 import {
   findRelaySyncState,
+  orderDefaultTransportsFirst,
   splitTransportUrl,
   toTransportSyncKind,
 } from "./evolu-transports.ts"
@@ -46,6 +50,23 @@ const stateFor = (ownerId: OwnerId): SyncState => ({
       owners: [{ type: "Writable", ownerId, routes: [route] }],
     },
   ],
+})
+
+describe("orderDefaultTransportsFirst", () => {
+  test("lists the default relays first, in their order, then the others as they came", () => {
+    const [first, second] = defaultEvoluTransportUrls
+    const added = { url: "wss://added.example" }
+    const other = { url: "wss://other.example" }
+
+    expect(
+      orderDefaultTransportsFirst([
+        added,
+        { url: second },
+        other,
+        { url: first },
+      ])
+    ).toEqual([{ url: first }, { url: second }, added, other])
+  })
 })
 
 describe("findRelaySyncState", () => {

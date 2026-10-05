@@ -1,6 +1,7 @@
 import { rmSync } from "node:fs"
 import {
   type CreateSqliteDriverDep,
+  type CreateWebSocket,
   constVoid,
   createConsole,
   createConsoleStoreOutput,
@@ -9,7 +10,9 @@ import {
   createRun,
   createSharedWorker,
   createSqlite,
+  createWebSocket,
   createWorker,
+  type EvoluConfig,
   Name,
   ok,
   type SqliteRow,
@@ -27,11 +30,20 @@ import {
   type SharedWorkerOutput,
   startDbWorker,
 } from "@evolu/common/local-first"
-import BetterSQLite, { type Statement } from "better-sqlite3"
-import { createTestAppEvolu } from "../evolu/client.ts"
+import { createAppEvolu, createTestAppEvolu } from "../evolu/client.ts"
+import {
+  deriveTableSelfPayRoot,
+  type MasterKey,
+} from "../modules/shared/key-derivation.ts"
+import {
+  loadOpenSqliteDatabase,
+  type OpenSqliteDatabase,
+  type SqliteStatement,
+} from "./sqlite-database.ts"
 
 const createSqliteDep = (
-  filename: "memory" | string
+  filename: "memory" | string,
+  openDatabase: OpenSqliteDatabase
 ): CreateSqliteDriverDep => ({
   createSqliteDriver: (_name, options) => () => {
     const sqliteFilename =
@@ -49,11 +61,11 @@ const createSqliteDep = (
           ]
 
     using disposer = new DisposableStack()
-    const db = disposer.adopt(new BetterSQLite(sqliteFilename), (db) => {
+    const db = disposer.adopt(openDatabase(sqliteFilename), (db) => {
       db.close()
     })
     const cache = disposer.use(
-      createPreparedStatementsCache<Statement>(
+      createPreparedStatementsCache<SqliteStatement>(
         (sql) => db.prepare(sql),
         constVoid
       )
@@ -105,7 +117,12 @@ const createSqliteDep = (
   },
 })
 
-export const setupRunWithEvoluDeps = async (mode: "memory" | string) => {
+export const setupRunWithEvoluDeps = async (
+  mode: "memory" | string,
+  createWebSocket: CreateWebSocket = testCreateWebSocket({
+    throwOnCreate: true,
+  })
+) => {
   await using disposer = new AsyncDisposableStack()
 
   const consoleStoreOutput = createConsoleStoreOutput()
@@ -122,7 +139,7 @@ export const setupRunWithEvoluDeps = async (mode: "memory" | string) => {
       createBroadcastChannel: testCreateBroadcastChannel,
       createMessageChannel: testCreateMessageChannel,
       createMessagePort: createMessagePort,
-      createWebSocket: testCreateWebSocket({ throwOnCreate: true }),
+      createWebSocket,
       lockManager,
       // What the shared worker may promise about stored databases: a file
       // persists, memory does not.
@@ -134,7 +151,9 @@ export const setupRunWithEvoluDeps = async (mode: "memory" | string) => {
   )
 
   const driver = await run.ok(
-    createSqliteDep(mode).createSqliteDriver(Name.orThrow("test"))
+    createSqliteDep(mode, await loadOpenSqliteDatabase()).createSqliteDriver(
+      Name.orThrow("test")
+    )
   )
 
   const workerRun = disposer.use(
@@ -188,20 +207,40 @@ export const setupRunWithEvoluDeps = async (mode: "memory" | string) => {
   } as const
 }
 
+export interface NodeEvoluAccount {
+  readonly masterKey: MasterKey
+  readonly transports: NonNullable<EvoluConfig["transports"]>
+}
+
 /** App Evolu on an explicit Node SQLite file, or `"memory"` for tests. */
-export const createNodeEvolu = async (mode: "memory" | string) => {
+export const createNodeEvolu = async (
+  mode: "memory" | string,
+  account?: NodeEvoluAccount
+) => {
   await using disposer = new AsyncDisposableStack()
 
-  const { run } = disposer.use(await setupRunWithEvoluDeps(mode))
+  const { run } = disposer.use(
+    account === undefined
+      ? await setupRunWithEvoluDeps(mode)
+      : await setupRunWithEvoluDeps(mode, createWebSocket)
+  )
 
-  // The CLI database is owned by the shared Evolu test owner until the CLI
-  // gets a real owner identity.
-  const evolu = disposer.use(await run.ok(createTestAppEvolu()))
+  // Without an account, the database is owned by the shared Evolu test
+  // owner.
+  const evolu = disposer.use(
+    await run.ok(
+      account === undefined ? createTestAppEvolu() : createAppEvolu(account)
+    )
+  )
 
   const disposables = disposer.move()
 
   return {
     evolu,
+    tableSelfPayRoot:
+      account === undefined
+        ? undefined
+        : deriveTableSelfPayRoot(account.masterKey),
     [Symbol.asyncDispose]: () => disposables.disposeAsync(),
   } as const
 }

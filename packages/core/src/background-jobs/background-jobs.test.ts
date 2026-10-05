@@ -6,8 +6,8 @@ import type { MasterKey } from "../modules/shared/key-derivation.ts"
 import type { AppBackgroundJobContext } from "./background-job-types.ts"
 import {
   cashuBackgroundJobs,
-  cliBackgroundJobs,
   getBackgroundJobsForRuntime,
+  nativeBackgroundJobs,
 } from "./background-jobs.ts"
 import { startCashuAccountSyncJob } from "./jobs/cashu-account-sync-job.ts"
 import { startEetReportingJob } from "./jobs/eet-reporting-job.ts"
@@ -36,12 +36,8 @@ describe("getBackgroundJobsForRuntime", () => {
     ])
   })
 
-  test("keeps EET reporting out of the CLI, which has no terminal device", () => {
-    expect(cliBackgroundJobs).not.toContain(startEetReportingJob)
-  })
-
   test("keeps the Cashu job out of the CLI, which has no Linky owners", () => {
-    expect(cliBackgroundJobs).not.toContain(startCashuAccountSyncJob)
+    expect(nativeBackgroundJobs).not.toContain(startCashuAccountSyncJob)
   })
 
   test("keeps the Cashu job apart, so a Cashu wallet that fails to start stops no other job", () => {

@@ -6,7 +6,10 @@ import {
   type SyncState,
   syncStateToRelaySyncStates,
 } from "@evolu/common/local-first"
-import { appOwnerIdPlaceholder } from "@payky/core/evolu/device-account"
+import {
+  appOwnerIdPlaceholder,
+  defaultEvoluTransportUrls,
+} from "@payky/core/evolu/device-account"
 import type { TranslationKey } from "./i18n/resources.ts"
 
 /**
@@ -17,6 +20,20 @@ const transportLabel = (url: string): string => {
   const queryIndex = url.indexOf("?")
   return queryIndex === -1 ? url : url.slice(0, queryIndex)
 }
+
+const defaultTransportRank = (url: string): number => {
+  const index = defaultEvoluTransportUrls.findIndex(
+    (defaultUrl) => defaultUrl === url
+  )
+  return index === -1 ? defaultEvoluTransportUrls.length : index
+}
+
+export const orderDefaultTransportsFirst = <T extends { readonly url: string }>(
+  transports: ReadonlyArray<T>
+): ReadonlyArray<T> =>
+  transports.toSorted(
+    (a, b) => defaultTransportRank(a.url) - defaultTransportRank(b.url)
+  )
 
 /**
  * The relay state of `url` for `ownerId` in the database `name`, or null

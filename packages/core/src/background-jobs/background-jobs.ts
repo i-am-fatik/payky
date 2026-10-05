@@ -1,6 +1,5 @@
 import type {
   AppBackgroundJob,
-  BackgroundJob,
   CashuBackgroundJob,
 } from "./background-job-types.ts"
 import { startCashuAccountSyncJob } from "./jobs/cashu-account-sync-job.ts"
@@ -10,16 +9,9 @@ import { startSelfPayPointerJob } from "./jobs/self-pay-pointer-job.ts"
 import { startSparkAccountTransactionSyncJob } from "./jobs/spark-account-transaction-sync-job.ts"
 import { startTableSelfPayPublishingJob } from "./jobs/table-self-pay-publishing-job.ts"
 
-/**
- * Right for the CLI.
- */
-export const cliBackgroundJobs = [
+export const nativeBackgroundJobs = [
   startFioAccountTransactionSyncJob,
   startSparkAccountTransactionSyncJob,
-] satisfies ReadonlyArray<BackgroundJob>
-
-const nativeBackgroundJobs = [
-  ...cliBackgroundJobs,
   startEetReportingJob,
   startTableSelfPayPublishingJob,
   startSelfPayPointerJob,

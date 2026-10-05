@@ -168,6 +168,7 @@ export const resolveTransportUrl = (url: string, appOwnerId: string): WssUrl =>
 export const defaultEvoluTransportUrls = [
   WssUrl("wss://evolu.linky.fit"),
   WssUrl(`wss://live-relay.payky.me/${appOwnerIdPlaceholder}`),
+  WssUrl("wss://evolu.agora.gripe"),
 ] as const
 
 const createAccountEvoluTransportId = ({

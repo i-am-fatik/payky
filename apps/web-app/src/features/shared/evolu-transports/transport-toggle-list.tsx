@@ -1,5 +1,8 @@
 import { sqliteFalse, sqliteTrue } from "@evolu/common"
-import { splitTransportUrl } from "@payky/app-shared/evolu-transports"
+import {
+  orderDefaultTransportsFirst,
+  splitTransportUrl,
+} from "@payky/app-shared/evolu-transports"
 import {
   accountTransportsQuery,
   setAccountEvoluTransportActive,
@@ -33,6 +36,7 @@ export function TransportToggleList({
   const { data: transports } = useDeviceEvoluQuery(
     accountTransportsQuery(accountId)
   )
+  const orderedTransports = orderDefaultTransportsFirst(transports)
   const [pendingTransportId, setPendingTransportId] = useState<string | null>(
     null
   )
@@ -47,7 +51,7 @@ export function TransportToggleList({
 
   return (
     <ul className="divide-y rounded-lg border">
-      {transports.map((transport) => (
+      {orderedTransports.map((transport) => (
         <TransportListItem
           key={transport.id}
           isActive={transport.isActive}

@@ -1,5 +1,8 @@
 import { sqliteFalse, sqliteTrue } from "@evolu/common"
-import { splitTransportUrl } from "@payky/app-shared/evolu-transports"
+import {
+  orderDefaultTransportsFirst,
+  splitTransportUrl,
+} from "@payky/app-shared/evolu-transports"
 import {
   accountTransportsQuery,
   setAccountEvoluTransportActive,
@@ -50,7 +53,7 @@ export function TransportList({
       borderColor="border-color"
       overflow="hidden"
     >
-      {transports.map((transport, index) => {
+      {orderDefaultTransportsFirst(transports).map((transport, index) => {
         const active = transport.isActive === sqliteTrue
         return (
           <YStack
