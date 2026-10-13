@@ -55,8 +55,10 @@ import {
 import {
   fioPlugin,
   fioPluginIndexes,
+  fioPluginSyncLease,
   fioPluginSyncPointer,
   fioPluginToken,
+  fioSyncDeviceUptime,
 } from "../modules/fio-plugin/fio-plugin.ts"
 import { item, itemIndexes } from "../modules/item/item.ts"
 import { legalEntity } from "../modules/legal-entity/legal-entity.ts"
@@ -170,6 +172,8 @@ export const AppSchema = {
   paymentNumberSeries,
   fioPlugin,
   fioPluginSyncPointer,
+  fioPluginSyncLease,
+  fioSyncDeviceUptime,
   fioPluginToken,
   monetaPlugin,
   monetaPluginSyncPointer,
