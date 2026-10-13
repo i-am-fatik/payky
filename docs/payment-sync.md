@@ -47,7 +47,7 @@ repair rows created before this batching existed.
 | | FIO | Spark |
 |---|---|---|
 | Trigger | per-plugin timer | account-wide timer + wallet events (`transfer:claimed`, `balance:update`, `deposit:confirmed`) |
-| Default interval | 30s (`numberOfSecondsBetweenChecks`) | 60s (`DEFAULT_RECHECK_INTERVAL_MS`) |
+| Default interval | 30s per token (`numberOfSecondsBetweenChecks`), divided by the number of tokens, which are used in turn | 60s (`DEFAULT_RECHECK_INTERVAL_MS`) |
 | Sync pointer | `fioPluginSyncPointer.lastSyncedDate` | `sparkAccountSyncPointer.lastSyncedAt` |
 | Lookback overlap | `syncLookbackDays`, default **1 day**, per-plugin | `SPARK_SYNC_LOOKBACK_HOURS` = **72h**, fixed |
 | Cold-start scan | 2 months back (`FIO_FIRST_SYNC_LOOKBACK_MONTHS`) | unbounded (full history) |
@@ -63,9 +63,12 @@ FIO only runs native/CLI (no CORS/proxy for browser); Spark runs everywhere.
 
 ## Multi-device & idempotency
 
-A FIO plugin / Spark account is normal synced Evolu data — every device
-independently runs its own sync job for it, with no leader election. Safety
-comes from convergence, not coordination:
+A FIO plugin / Spark account is normal synced Evolu data. Every device runs
+its own Spark sync. FIO allows one request per token every 30 s across all
+clients, so one device polls a FIO plugin at a time: it holds a synced
+lease (`fioPluginSyncLease`), and a device that runs clearly more of the day
+(`fioSyncDeviceUptime`) takes it over (`docs/decisions/payment/0007`). The lease is advisory, since Evolu has no
+arbiter, so safety still comes from convergence:
 
 - `accountTransaction.id` derives from `accountId` + bank reference (FIO) or
   `sparkTransferId` (Spark) — two devices recording the same thing write the

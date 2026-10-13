@@ -1,8 +1,11 @@
-import { ok, type Run } from "@evolu/common"
+import { err, ok, type Result, type Run, type Task } from "@evolu/common"
 import { format, subDays, subMonths } from "date-fns"
+import type { DeviceIdDep } from "../../deps.ts"
 import {
   createFioApiDep,
+  type FioAllTokensRestingError,
   type FioApiDep,
+  type FioRateLimitError,
   type FioTransaction,
   fetchFioTransactionsByPeriod,
 } from "../../integrations/fio/fio-client.ts"
@@ -11,13 +14,17 @@ import {
   upsertAccountTransactionRows,
 } from "../../modules/account-transaction/account-transaction-actions.ts"
 import type { AccountTransactionId } from "../../modules/account-transaction/account-transaction-types.ts"
+import type { DeviceId } from "../../modules/device/device-types.ts"
 import { defaultFioPluginSyncLookbackDays } from "../../modules/fio-plugin/fio-plugin-actions.ts"
 import {
   activeFioPluginsQuery,
   existingFioTransactionBankReferencesQuery,
+  fioPluginSyncLeaseByPluginIdQuery,
   fioPluginSyncPointerByPluginIdQuery,
+  fioSyncDeviceUptimeByDeviceIdQuery,
 } from "../../modules/fio-plugin/fio-plugin-queries.ts"
 import type { FioPluginId } from "../../modules/fio-plugin/fio-plugin-types.ts"
+import { fioSyncDeviceUptimeId } from "../../modules/fio-plugin/fio-plugin-utils.ts"
 import {
   loadAutomaticReconciliation,
   reconcileAccountTransaction,
@@ -38,28 +45,102 @@ import {
   IntegerSchema,
   NonEmptyString255Schema,
   NonEmptyStringSchema,
+  NonNegativeIntegerSchema,
   TimestampMsSchema,
 } from "../../modules/shared/schema.ts"
-import type {
-  BackgroundJob,
-  BackgroundJobContext,
-} from "../background-job-types.ts"
+import type { BackgroundJobContext } from "../background-job-types.ts"
 import { createKeyedTaskQueue } from "../keyed-task-queue.ts"
 import { reconcileAccountSyncSessions } from "../reconcile-account-sync-sessions.ts"
 
-type Context = BackgroundJobContext
+type Context = BackgroundJobContext & DeviceIdDep
 
 const FIO_FIRST_SYNC_LOOKBACK_MONTHS = 2
 const FIO_MAX_RETRY_BACKOFF_MS = 15 * 60 * 1000
+const FIO_SYNC_LEASE_MS = 10 * 60 * 1000
+const FIO_SYNC_TAKEOVER_UPTIME_MARGIN = 0.1
+const FIO_SYNC_UPTIME_TIME_CONSTANT_MS = 24 * 60 * 60 * 1000
+const FIO_SYNC_UPTIME_TICK_MS = 60 * 1000
+const FIO_SYNC_UPTIME_MAX_TICK_GAP_MS = 2 * FIO_SYNC_UPTIME_TICK_MS
+const FIO_SYNC_UPTIME_SAVE_MS = 30 * 60 * 1000
 
 export const getFioRetryBackoffMs = (
-  checkIntervalSeconds: number,
+  secondsPerToken: number,
   failedSyncCount: number
 ): number =>
   Math.min(
-    checkIntervalSeconds * 1000 * 2 ** (failedSyncCount - 1),
+    secondsPerToken * 1000 * 2 ** (failedSyncCount - 1),
     FIO_MAX_RETRY_BACKOFF_MS
   )
+
+export const getFioCheckIntervalMs = (
+  secondsPerToken: number,
+  tokenCount: number
+): number => Math.ceil((secondsPerToken * 1000) / tokenCount)
+
+type FioSyncLeaseDecision =
+  | { readonly poll: false }
+  | {
+      readonly poll: true
+      readonly renewLease: boolean
+      readonly takenOverAt: number | null
+    }
+
+interface FioSyncLease {
+  readonly deviceId: DeviceId
+  readonly expiresAt: number
+}
+
+export const decideFioSyncLease = ({
+  lease,
+  deviceId,
+  uptime,
+  holderUptime,
+  now,
+}: {
+  readonly lease: FioSyncLease | undefined
+  readonly deviceId: DeviceId
+  readonly uptime: number
+  readonly holderUptime: number
+  readonly now: number
+}): FioSyncLeaseDecision => {
+  if (lease === undefined)
+    return { poll: true, renewLease: true, takenOverAt: null }
+  if (lease.deviceId === deviceId) {
+    return {
+      poll: true,
+      renewLease: lease.expiresAt - now <= FIO_SYNC_LEASE_MS / 2,
+      takenOverAt: null,
+    }
+  }
+  const runsClearlyMore =
+    uptime >= holderUptime + FIO_SYNC_TAKEOVER_UPTIME_MARGIN
+  if (lease.expiresAt > now && !runsClearlyMore) return { poll: false }
+
+  return {
+    poll: true,
+    renewLease: true,
+    takenOverAt: Math.min(now, lease.expiresAt),
+  }
+}
+
+interface FioSyncUptimeStep {
+  readonly uptime: number
+  readonly elapsedMs: number
+}
+
+const fioSyncUptimePastWeight = (elapsedMs: number): number =>
+  Math.exp(-Math.max(0, elapsedMs) / FIO_SYNC_UPTIME_TIME_CONSTANT_MS)
+
+export const fioSyncUptimeAfterRunning = ({
+  uptime,
+  elapsedMs,
+}: FioSyncUptimeStep): number =>
+  1 - (1 - uptime) * fioSyncUptimePastWeight(elapsedMs)
+
+export const fioSyncUptimeAfterOff = ({
+  uptime,
+  elapsedMs,
+}: FioSyncUptimeStep): number => uptime * fioSyncUptimePastWeight(elapsedMs)
 
 const loadActiveFioPlugins = (deps: Context) =>
   deps.evolu.loadQuery(activeFioPluginsQuery)
@@ -71,7 +152,7 @@ type ActiveFioPluginWithTokens = ActiveFioPlugin & {
 }
 
 export const createFioAccountTransactionSyncJob =
-  (): BackgroundJob => (run) => {
+  (): Task<AsyncDisposable, never, Context> => (run) => {
     // A fresh `run.create()` scope, not the Task's own `run`: that one is
     // disposed the instant this Task function returns, but the sync classes
     // below keep composing Tasks (via their stored `run`) for as long as the
@@ -99,8 +180,10 @@ export const startFioAccountTransactionSyncJob =
 
 class FioAccountTransactionSync {
   private readonly pluginSyncs = new Map<FioPluginId, FioPluginSync>()
+  private readonly restingUntilByToken = new Map<string, number>()
   private readonly unsubscribePlugins: () => void
   private readonly run: Run<Context>
+  private uptime: FioSyncUptime | null = null
   private readonly refreshQueue = createKeyedTaskQueue<"refresh">({
     onError: (error) => this.run.deps.onError(error),
   })
@@ -125,10 +208,12 @@ class FioAccountTransactionSync {
     this.unsubscribePlugins()
     await this.refreshQueue[Symbol.asyncDispose]()
 
-    for (const sync of this.pluginSyncs.values()) {
+    for (const [pluginId, sync] of this.pluginSyncs) {
       await sync.dispose()
+      await releaseFioSyncLease(this.run.deps, pluginId)
     }
     this.pluginSyncs.clear()
+    await this.uptime?.dispose()
     this.run.deps.console.info("Stopped FIO account transaction sync job.")
   }
 
@@ -147,18 +232,26 @@ class FioAccountTransactionSync {
       skippedPluginWithoutTokenCount: plugins.length - activePlugins.length,
     })
 
+    const stoppedPluginIds: FioPluginId[] = []
     await reconcileAccountSyncSessions({
       sessions: this.pluginSyncs,
       activeAccounts: activePlugins,
       getKey: (plugin) => plugin.id,
       matches: (sync, plugin) => sync.matches(plugin),
       createSession: (plugin) => {
-        const sync = new FioPluginSync(this.run, plugin)
+        this.uptime ??= new FioSyncUptime(this.run)
+        const sync = new FioPluginSync(
+          this.run,
+          plugin,
+          this.uptime,
+          this.restingUntilByToken
+        )
         sync.start()
         return sync
       },
       disposeSession: (sync) => sync.dispose(),
       onSessionStopped: (pluginId) => {
+        stoppedPluginIds.push(pluginId)
         this.run.deps.console.info("Stopped FIO plugin sync.", { pluginId })
       },
       onSessionStarted: (pluginId, plugin, replacedExistingSync) => {
@@ -170,33 +263,177 @@ class FioAccountTransactionSync {
         })
       },
     })
+    for (const pluginId of stoppedPluginIds) {
+      await releaseFioSyncLease(this.run.deps, pluginId)
+    }
+    if (this.pluginSyncs.size === 0) {
+      await this.uptime?.dispose()
+      this.uptime = null
+    }
   }
+}
+
+class FioSyncUptime {
+  private readonly run: Run<Context>
+  private readonly timer: ReturnType<typeof setInterval>
+  private readonly loaded: Promise<void>
+  private uptime = 0
+  private tickedAt: number
+  private savedAt: number
+
+  constructor(run: Run<Context>) {
+    this.run = run
+    this.tickedAt = run.deps.date.now().getTime()
+    this.savedAt = this.tickedAt
+    this.loaded = this.load().catch((error: unknown) =>
+      this.run.deps.onError(error)
+    )
+    this.timer = setInterval(() => {
+      this.tick()
+      if (this.tickedAt - this.savedAt >= FIO_SYNC_UPTIME_SAVE_MS)
+        this.save().catch((error: unknown) => this.run.deps.onError(error))
+    }, FIO_SYNC_UPTIME_TICK_MS)
+    ;(this.timer as { readonly unref?: () => void }).unref?.()
+  }
+
+  async current(): Promise<number> {
+    await this.loaded
+    return this.uptime
+  }
+
+  async dispose(): Promise<void> {
+    clearInterval(this.timer)
+    await this.loaded
+    this.tick()
+    await this.save()
+  }
+
+  private async load(): Promise<void> {
+    const saved = await loadSavedFioSyncUptime(
+      this.run.deps,
+      this.run.deps.deviceId
+    )
+    this.uptime = fioSyncUptimeAfterOff({
+      uptime: saved.uptime,
+      elapsedMs: this.run.deps.date.now().getTime() - saved.measuredAt,
+    })
+    this.run.deps.console.debug("Loaded FIO sync uptime.", {
+      uptime: this.uptime,
+    })
+    await this.save()
+  }
+
+  private tick(): void {
+    const now = this.run.deps.date.now().getTime()
+    const elapsedMs = now - this.tickedAt
+    const advance =
+      elapsedMs <= FIO_SYNC_UPTIME_MAX_TICK_GAP_MS
+        ? fioSyncUptimeAfterRunning
+        : fioSyncUptimeAfterOff
+    this.uptime = advance({ uptime: this.uptime, elapsedMs })
+    this.tickedAt = now
+  }
+
+  private async save(): Promise<void> {
+    this.savedAt = this.tickedAt
+    await runMutationWithCompletion((options) =>
+      this.run.deps.evolu.upsert(
+        "fioSyncDeviceUptime",
+        removeUndefinedValues({
+          id: fioSyncDeviceUptimeId(this.run.deps.deviceId),
+          uptimePerMille: NonNegativeIntegerSchema.decode(
+            Math.round(this.uptime * 1000)
+          ),
+          measuredAt: TimestampMsSchema.decode(this.tickedAt),
+        }),
+        { ...options, owner: this.run.deps.evoluOwner }
+      )
+    )
+  }
+}
+
+const NEVER_MEASURED_FIO_SYNC_UPTIME = { uptime: 0, measuredAt: 0 }
+
+const loadSavedFioSyncUptime = async (
+  deps: Context,
+  deviceId: DeviceId
+): Promise<{ readonly uptime: number; readonly measuredAt: number }> => {
+  const [saved] = await deps.evolu.loadQuery(
+    fioSyncDeviceUptimeByDeviceIdQuery(deviceId)
+  )
+  if (saved === undefined) return NEVER_MEASURED_FIO_SYNC_UPTIME
+  return { uptime: saved.uptimePerMille / 1000, measuredAt: saved.measuredAt }
+}
+
+const saveFioSyncLease = async (
+  deps: Context,
+  pluginId: FioPluginId,
+  expiresAt: number
+): Promise<void> => {
+  await runMutationWithCompletion((options) =>
+    deps.evolu.upsert(
+      "fioPluginSyncLease",
+      removeUndefinedValues({
+        id: pluginId,
+        deviceId: deps.deviceId,
+        expiresAt: TimestampMsSchema.decode(expiresAt),
+      }),
+      { ...options, owner: deps.evoluOwner }
+    )
+  )
+}
+
+const releaseFioSyncLease = async (
+  deps: Context,
+  pluginId: FioPluginId
+): Promise<void> => {
+  const now = deps.date.now().getTime()
+  const [lease] = await deps.evolu.loadQuery(
+    fioPluginSyncLeaseByPluginIdQuery(pluginId)
+  )
+  if (lease?.deviceId !== deps.deviceId || lease.expiresAt <= now) return
+  await saveFioSyncLease(deps, pluginId, now)
 }
 
 class FioPluginSync {
   private readonly timer: ReturnType<typeof setInterval>
   private readonly run: Run<Context>
   private readonly plugin: ActiveFioPluginWithTokens
+  private readonly uptime: FioSyncUptime
   private readonly fioApiDep: FioApiDep
   private failedSyncCount = 0
   private nextRetryAt: number | null = null
+  private restTimer: ReturnType<typeof setTimeout> | null = null
   private readonly syncQueue = createKeyedTaskQueue<"sync">({
     onError: (error) => this.run.deps.onError(error),
   })
 
-  constructor(run: Run<Context>, plugin: ActiveFioPluginWithTokens) {
+  constructor(
+    run: Run<Context>,
+    plugin: ActiveFioPluginWithTokens,
+    uptime: FioSyncUptime,
+    restingUntilByToken: Map<string, number>
+  ) {
     this.run = run
     this.plugin = plugin
+    this.uptime = uptime
     // The dep lives as long as this sync session, and `matches()` restarts
     // the session whenever the token set changes, so the client-side
-    // `getToken` rotation always covers the current tokens.
+    // `takeToken` rotation always covers the current tokens.
     const [firstToken, ...restTokens] = plugin.tokens
     this.fioApiDep = createFioApiDep({
       tokens: [firstToken.token, ...restTokens.map((token) => token.token)],
+      restingUntilByToken,
     })
-    this.timer = setInterval(() => {
-      this.queueSync()
-    }, plugin.numberOfSecondsBetweenChecks * 1000)
+    this.timer = setInterval(
+      () => {
+        this.queueSync()
+      },
+      getFioCheckIntervalMs(
+        plugin.numberOfSecondsBetweenChecks,
+        plugin.tokens.length
+      )
+    )
     ;(this.timer as { readonly unref?: () => void }).unref?.()
   }
 
@@ -208,6 +445,7 @@ class FioPluginSync {
     if (this.syncQueue.isDisposed) return
 
     clearInterval(this.timer)
+    if (this.restTimer !== null) clearTimeout(this.restTimer)
     await this.syncQueue[Symbol.asyncDispose]()
   }
 
@@ -231,29 +469,103 @@ class FioPluginSync {
     this.syncQueue.enqueue("sync", () => this.syncTransactions())
   }
 
+  private retrySyncAt(at: number): void {
+    this.restTimer = setTimeout(() => {
+      this.restTimer = null
+      this.syncQueue.enqueue("sync", () => this.syncTransactions())
+    }, at - this.run.deps.date.now().getTime())
+    ;(this.restTimer as { readonly unref?: () => void }).unref?.()
+  }
+
   private async syncTransactions(): Promise<void> {
     try {
-      await this.syncTransactionsOnce()
-      this.failedSyncCount = 0
-      this.nextRetryAt = null
+      const mayPoll = await this.holdLease()
+      if (!mayPoll || this.syncQueue.isDisposed) return
+      this.scheduleNextSync(await this.syncTransactionsOnce())
     } catch (error) {
-      this.failedSyncCount += 1
-      const retryInMs = getFioRetryBackoffMs(
-        this.plugin.numberOfSecondsBetweenChecks,
-        this.failedSyncCount
-      )
-      this.nextRetryAt = this.run.deps.date.now().getTime() + retryInMs
-      this.run.deps.console.warn("Delayed FIO sync after a failed attempt.", {
-        accountId: this.plugin.accountId,
-        failedSyncCount: this.failedSyncCount,
-        pluginId: this.plugin.id,
-        retryInMs,
-      })
+      this.delayAfterFailedSync()
       throw error
     }
   }
 
-  private async syncTransactionsOnce(): Promise<void> {
+  private scheduleNextSync(
+    result: Result<void, FioRateLimitError | FioAllTokensRestingError>
+  ): void {
+    if (this.restTimer !== null) clearTimeout(this.restTimer)
+    this.restTimer = null
+    if (result.ok) {
+      this.failedSyncCount = 0
+      this.nextRetryAt = null
+    } else if (result.error.type === "FioAllTokensRestingError") {
+      this.nextRetryAt = result.error.retryAt
+      this.retrySyncAt(result.error.retryAt)
+    } else {
+      this.delayAfterFailedSync()
+    }
+  }
+
+  private async holdLease(): Promise<boolean> {
+    const { deviceId, evolu } = this.run.deps
+    const now = this.run.deps.date.now().getTime()
+    const [lease] = await evolu.loadQuery(
+      fioPluginSyncLeaseByPluginIdQuery(this.plugin.id)
+    )
+    const holderUptime =
+      lease === undefined || lease.deviceId === deviceId
+        ? 0
+        : (await loadSavedFioSyncUptime(this.run.deps, lease.deviceId)).uptime
+    const decision = decideFioSyncLease({
+      lease,
+      deviceId,
+      uptime: await this.uptime.current(),
+      holderUptime,
+      now,
+    })
+    if (!decision.poll) {
+      this.run.deps.console.debug(
+        "Skipped FIO sync while another device holds the lease.",
+        { lease, pluginId: this.plugin.id }
+      )
+      return false
+    }
+    if (decision.takenOverAt !== null) {
+      const lastPossibleRequestAt = new Date(decision.takenOverAt)
+      for (const { token } of this.plugin.tokens) {
+        this.fioApiDep.fioApi.restToken(token, lastPossibleRequestAt)
+      }
+      this.run.deps.console.info("Took over the FIO sync lease.", {
+        previousLease: lease,
+        pluginId: this.plugin.id,
+      })
+    }
+    if (decision.renewLease) {
+      await saveFioSyncLease(
+        this.run.deps,
+        this.plugin.id,
+        now + FIO_SYNC_LEASE_MS
+      )
+    }
+    return true
+  }
+
+  private delayAfterFailedSync(): void {
+    this.failedSyncCount += 1
+    const retryInMs = getFioRetryBackoffMs(
+      this.plugin.numberOfSecondsBetweenChecks,
+      this.failedSyncCount
+    )
+    this.nextRetryAt = this.run.deps.date.now().getTime() + retryInMs
+    this.run.deps.console.warn("Delayed FIO sync after a failed attempt.", {
+      accountId: this.plugin.accountId,
+      failedSyncCount: this.failedSyncCount,
+      pluginId: this.plugin.id,
+      retryInMs,
+    })
+  }
+
+  private async syncTransactionsOnce(): Promise<
+    Result<void, FioRateLimitError | FioAllTokensRestingError>
+  > {
     const period = await this.getSyncPeriod()
     this.run.deps.console.info("Started FIO transaction sync.", {
       accountId: this.plugin.accountId,
@@ -279,7 +591,15 @@ class FioPluginSync {
           responseBody: result.error.responseBody,
         }
       )
-      return
+      return err(result.error)
+    }
+    if (!result.ok && result.error.type === "FioAllTokensRestingError") {
+      this.run.deps.console.debug("Skipped FIO sync while every token rests.", {
+        accountId: this.plugin.accountId,
+        pluginId: this.plugin.id,
+        retryAt: result.error.retryAt,
+      })
+      return err(result.error)
     }
     if (!result.ok) throw result.error
     if (result.value.iban !== this.plugin.iban) {
@@ -292,7 +612,7 @@ class FioPluginSync {
           pluginId: this.plugin.id,
         }
       )
-      return
+      return ok()
     }
 
     const { toRecord, toReconcile } = await this.getTransactionsToRecord(
@@ -307,11 +627,11 @@ class FioPluginSync {
     })
     let skippedLockedTransaction = false
     for (const transaction of toRecord) {
-      if (this.syncQueue.isDisposed) return
+      if (this.syncQueue.isDisposed) return ok()
       skippedLockedTransaction ||= !(await this.recordTransaction(transaction))
     }
     for (const accountTransactionId of toReconcile) {
-      if (this.syncQueue.isDisposed) return
+      if (this.syncQueue.isDisposed) return ok()
       await this.retryReconciliation(accountTransactionId)
     }
     if (skippedLockedTransaction) {
@@ -322,7 +642,7 @@ class FioPluginSync {
           pluginId: this.plugin.id,
         }
       )
-      return
+      return ok()
     }
     await this.saveSyncPointer(period.to)
     this.run.deps.console.info("Finished FIO transaction sync.", {
@@ -332,6 +652,7 @@ class FioPluginSync {
       recordedCount: toRecord.length,
       to: period.to,
     })
+    return ok()
   }
 
   /**
