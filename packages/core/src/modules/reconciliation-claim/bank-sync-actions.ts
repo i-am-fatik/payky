@@ -9,21 +9,19 @@ import {
 } from "../account-transaction/account-transaction-actions.ts"
 import { ibanTransactionsByBankReferenceQuery } from "../account-transaction/account-transaction-queries.ts"
 import type { AccountTransactionId } from "../account-transaction/account-transaction-types.ts"
-import type { BillId } from "../bill/bill-types.ts"
 import type { PaymentId } from "../payment/payment-types.ts"
 import type { EvoluDep } from "../shared/evolu-deps.ts"
 import { runMutationWithCompletion } from "../shared/evolu-utils.ts"
-import type { NonEmptyString255, TimestampMs } from "../shared/schema.ts"
+import type { NonEmptyString255 } from "../shared/schema.ts"
 import {
-  loadAutomaticReconciliationClaimForNewAccountTransaction,
-  loadBillClosedAtForPayment,
+  type AutomaticReconciliation,
+  loadAutomaticReconciliation,
   reconcileAccountTransaction,
-  upsertReconciliationClaimRows,
+  upsertAutomaticReconciliationRows,
 } from "./reconciliation-claim-actions.ts"
 import { ibanTransactionsWithReconciliationCandidateQuery } from "./reconciliation-claim-queries.ts"
 import type {
   BankTransaction,
-  ReconciliationClaimWrite,
   RecordedBankTransaction,
   RecordedBankTransactions,
 } from "./reconciliation-claim-types.ts"
@@ -153,13 +151,12 @@ export const recordBankTransactions =
       pending = []
       await runMutationWithCompletion((options) => {
         const mutationOptions = { ...options, owner: run.deps.evoluOwner }
-        for (const { rows, claim, billClosing } of batch) {
+        for (const { rows, reconciliation } of batch) {
           upsertAccountTransactionRows(run.deps.evolu, rows, mutationOptions)
-          if (claim !== null) {
-            upsertReconciliationClaimRows(
+          if (reconciliation !== null) {
+            upsertAutomaticReconciliationRows(
               run.deps.evolu,
-              claim,
-              billClosing,
+              reconciliation,
               mutationOptions
             )
           }
@@ -173,22 +170,12 @@ export const recordBankTransactions =
 
       const input = toAccountTransactionInput(accountId, transaction)
       const rows = computeAccountTransactionRows(input, run.deps.date.now())
-      const claim = await run.ok(
-        loadAutomaticReconciliationClaimForNewAccountTransaction(input, rows.id)
+      const reconciliation = await run.ok(
+        loadAutomaticReconciliation(input, rows)
       )
-      const billClosing =
-        claim === null
-          ? null
-          : await run.ok(
-              loadBillClosedAtForPayment(claim.paymentId, {
-                id: rows.id,
-                kind: rows.kind,
-                amount: rows.input.amount,
-                currency: rows.input.currency,
-              })
-            )
-      pending.push({ rows, claim, billClosing })
+      pending.push({ rows, reconciliation })
 
+      const claim = reconciliation?.claim ?? null
       if (claim !== null) {
         claimedPaymentIds.push(claim.paymentId)
         run.deps.console.info(
@@ -249,11 +236,7 @@ export const reconcileUnclaimedBankTransactions =
 
 interface PendingBankTransaction {
   readonly rows: ReturnType<typeof computeAccountTransactionRows>
-  readonly claim: ReconciliationClaimWrite | null
-  readonly billClosing: {
-    readonly billId: BillId
-    readonly closedAt: TimestampMs
-  } | null
+  readonly reconciliation: AutomaticReconciliation | null
 }
 
 const toAccountTransactionInput = (
