@@ -19,10 +19,9 @@ import {
 } from "../../modules/fio-plugin/fio-plugin-queries.ts"
 import type { FioPluginId } from "../../modules/fio-plugin/fio-plugin-types.ts"
 import {
-  loadAutomaticReconciliationClaimForNewAccountTransaction,
-  loadBillClosedAtForPayment,
+  loadAutomaticReconciliation,
   reconcileAccountTransaction,
-  upsertReconciliationClaimRows,
+  upsertAutomaticReconciliationRows,
 } from "../../modules/reconciliation-claim/reconciliation-claim-actions.ts"
 import {
   dateStringToDate,
@@ -397,22 +396,9 @@ class FioPluginSync {
           input,
           this.run.deps.date.now()
         )
-        const claim = await this.run.ok(
-          loadAutomaticReconciliationClaimForNewAccountTransaction(
-            input,
-            accountTransaction.id
-          )
+        const reconciliation = await this.run.ok(
+          loadAutomaticReconciliation(input, accountTransaction.id)
         )
-        const billClosing =
-          claim === null
-            ? null
-            : await this.run.ok(
-                loadBillClosedAtForPayment(claim.paymentId, {
-                  id: accountTransaction.id,
-                  amount: accountTransaction.input.amount,
-                  currency: accountTransaction.input.currency,
-                })
-              )
 
         await runMutationWithCompletion((options) => {
           upsertAccountTransactionRows(
@@ -420,11 +406,10 @@ class FioPluginSync {
             accountTransaction,
             { ...options, owner: this.run.deps.evoluOwner }
           )
-          if (claim !== null) {
-            upsertReconciliationClaimRows(
+          if (reconciliation !== null) {
+            upsertAutomaticReconciliationRows(
               this.run.deps.evolu,
-              claim,
-              billClosing,
+              reconciliation,
               { ...options, owner: this.run.deps.evoluOwner }
             )
           }
@@ -435,7 +420,7 @@ class FioPluginSync {
           accountTransactionId,
           amount: transaction.amountMinor,
           bankReference,
-          paymentId: claim?.paymentId ?? null,
+          paymentId: reconciliation?.claim.paymentId ?? null,
           pluginId: this.plugin.id,
         })
         return true

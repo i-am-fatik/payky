@@ -81,16 +81,10 @@ export const loadBillClosedAtForPayment =
     )
   }
 
-/**
- * Finds the automatic claim a newly discovered FIO or Spark transaction
- * should receive before the transaction exists in Evolu, so the caller can
- * write both rows in one mutation batch.
- */
-export const loadAutomaticReconciliationClaimForNewAccountTransaction =
+const loadPaymentCandidateForNewAccountTransaction =
   (
-    accountTransaction: CreateAccountTransactionInput,
-    accountTransactionId: AccountTransactionId
-  ): Task<ReconciliationClaimWrite | null, never, EvoluDep & DateDep> =>
+    accountTransaction: CreateAccountTransactionInput
+  ): Task<PaymentId | null, never, EvoluDep> =>
   async (run) => {
     const { iban, spark, cashu } = accountTransaction
     let paymentId: PaymentId | undefined
@@ -146,15 +140,47 @@ export const loadAutomaticReconciliationClaimForNewAccountTransaction =
       paymentId = candidates[0]?.paymentId
     }
 
-    return ok(
-      paymentId === undefined
-        ? null
-        : createAutomaticReconciliationClaim(
-            paymentId,
-            accountTransactionId,
-            run.deps.date.now()
-          )
+    return ok(paymentId ?? null)
+  }
+
+interface AutomaticReconciliation {
+  readonly claim: ReconciliationClaimWrite
+  readonly billClosing: {
+    readonly billId: BillId
+    readonly closedAt: TimestampMs
+  } | null
+}
+
+/**
+ * Finds the automatic claim a newly discovered FIO or Spark transaction
+ * should receive before the transaction exists in Evolu, so the caller can
+ * write them in one mutation batch.
+ */
+export const loadAutomaticReconciliation =
+  (
+    accountTransaction: CreateAccountTransactionInput,
+    accountTransactionId: AccountTransactionId
+  ): Task<AutomaticReconciliation | null, never, EvoluDep & DateDep> =>
+  async (run) => {
+    const paymentId = await run.ok(
+      loadPaymentCandidateForNewAccountTransaction(accountTransaction)
     )
+    if (paymentId === null) return ok(null)
+
+    return ok({
+      claim: createAutomaticReconciliationClaim(
+        paymentId,
+        accountTransactionId,
+        run.deps.date.now()
+      ),
+      billClosing: await run.ok(
+        loadBillClosedAtForPayment(paymentId, {
+          id: accountTransactionId,
+          amount: accountTransaction.amount,
+          currency: accountTransaction.currency,
+        })
+      ),
+    })
   }
 
 /**
@@ -178,6 +204,14 @@ export const upsertReconciliationClaimRows = (
   if (billClosing !== null) {
     upsertBillClosedAt(evolu, billClosing.billId, billClosing.closedAt, options)
   }
+}
+
+export const upsertAutomaticReconciliationRows = (
+  evolu: EvoluDep["evolu"],
+  { claim, billClosing }: AutomaticReconciliation,
+  options: MutationOptions
+): void => {
+  upsertReconciliationClaimRows(evolu, claim, billClosing, options)
 }
 
 /**

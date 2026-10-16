@@ -14,10 +14,9 @@ import {
 } from "../../modules/account-transaction/account-transaction-actions.ts"
 import { accountTransactionSparkByTransferIdQuery } from "../../modules/account-transaction/account-transaction-queries.ts"
 import {
-  loadAutomaticReconciliationClaimForNewAccountTransaction,
-  loadBillClosedAtForPayment,
+  loadAutomaticReconciliation,
   reconcileAccountTransaction,
-  upsertReconciliationClaimRows,
+  upsertAutomaticReconciliationRows,
 } from "../../modules/reconciliation-claim/reconciliation-claim-actions.ts"
 import {
   removeUndefinedValues,
@@ -381,37 +380,24 @@ const createSparkAccountSyncSession = ({
           input.value,
           run.deps.date.now()
         )
-        const claim = await run.ok(
-          loadAutomaticReconciliationClaimForNewAccountTransaction(
-            input.value,
-            accountTransaction.id
-          )
+        const reconciliation = await run.ok(
+          loadAutomaticReconciliation(input.value, accountTransaction.id)
         )
-        const billClosing =
-          claim === null
-            ? null
-            : await run.ok(
-                loadBillClosedAtForPayment(claim.paymentId, {
-                  id: accountTransaction.id,
-                  amount: accountTransaction.input.amount,
-                  currency: accountTransaction.input.currency,
-                })
-              )
 
         await runMutationWithCompletion((options) => {
           upsertAccountTransactionRows(run.deps.evolu, accountTransaction, {
             ...options,
             owner: run.deps.evoluOwner,
           })
-          if (claim !== null) {
-            upsertReconciliationClaimRows(run.deps.evolu, claim, billClosing, {
+          if (reconciliation !== null) {
+            upsertAutomaticReconciliationRows(run.deps.evolu, reconciliation, {
               ...options,
               owner: run.deps.evoluOwner,
             })
           }
         })
         const accountTransactionId = accountTransaction.id
-        const paymentId = claim?.paymentId ?? null
+        const paymentId = reconciliation?.claim.paymentId ?? null
         run.deps.console.info("Created Spark account transaction.", {
           accountId: account.id,
           accountTransactionId,
