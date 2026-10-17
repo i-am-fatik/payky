@@ -23,6 +23,7 @@ import {
 } from "@payky/app-shared/refund-form"
 import type { EetDeliveryOutcome } from "@payky/core/integrations/eet/eet-client"
 import type { BillId } from "@payky/core/modules/bill/bill-types"
+import { deriveReturnableOverpayment } from "@payky/core/modules/bill/bill-utils"
 import {
   type DeliverEetReversalError,
   deliverEetReversal,
@@ -64,7 +65,7 @@ import {
 import {
   type FiatCurrency,
   Integer,
-  type NonNegativeInteger,
+  NonNegativeInteger,
 } from "@payky/core/modules/shared/schema"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
@@ -111,6 +112,7 @@ import {
   useEetSaleStatus,
 } from "@/features/shared/eet-sale-status.tsx"
 import { RefundBadge } from "@/features/shared/refund-badge.tsx"
+import { useOverpaymentInput } from "@/features/shared/use-overpayment-input.ts"
 import { useRequirePermission } from "@/hooks/use-access.ts"
 import { useAppRun } from "@/hooks/use-app-run.ts"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog.ts"
@@ -192,6 +194,15 @@ export function PaymentDetailRefunds({
   const defaultMethod = defaultRefundMethod(paymentMethodKinds, {
     qerkoRefundable,
   })
+  const overpaymentInput = useOverpaymentInput(
+    payment.billId === null
+      ? { paymentId: payment.id }
+      : { billId: payment.billId }
+  )
+  const returnableOverpayment =
+    overpaymentInput === undefined
+      ? NonNegativeInteger(0)
+      : deriveReturnableOverpayment(overpaymentInput, payment.id)
   const {
     refundableAmount,
     remainingAmount,
@@ -345,7 +356,7 @@ export function PaymentDetailRefunds({
           paymentId={payment.id}
           currency={payment.currency}
           remainingAmount={remainingAmount}
-          excess={excess}
+          returnableOverpayment={returnableOverpayment}
           refundableLines={refundableLines}
           tipAmount={refundableTipAmount}
           defaultMethod={defaultMethod}
@@ -436,7 +447,7 @@ function RefundDialog({
   paymentId,
   currency,
   remainingAmount,
-  excess,
+  returnableOverpayment,
   refundableLines,
   tipAmount,
   defaultMethod,
@@ -447,7 +458,7 @@ function RefundDialog({
   readonly paymentId: PaymentId
   readonly currency: FiatCurrency
   readonly remainingAmount: NonNegativeInteger
-  readonly excess: NonNegativeInteger
+  readonly returnableOverpayment: NonNegativeInteger
   readonly refundableLines: ReadonlyArray<RefundableLine<RefundablePaymentLine>>
   readonly tipAmount: NonNegativeInteger
   readonly defaultMethod: RefundDialogMethod
@@ -467,7 +478,7 @@ function RefundDialog({
   const amountText = deriveRefundAmountText({
     typedAmountText,
     remainingAmount,
-    excess,
+    returnableOverpayment,
     method,
     currency,
   })
@@ -516,7 +527,13 @@ function RefundDialog({
       const result = await run(
         refundPayment(
           mode === "amount"
-            ? { paymentId, method, deviceId: device.id, amount: refundAmount }
+            ? {
+                paymentId,
+                method,
+                deviceId: device.id,
+                amount: refundAmount,
+                purpose: returnableOverpayment > 0 ? "overpayment" : "goods",
+              }
             : { paymentId, method, deviceId: device.id, lines }
         )
       )

@@ -122,16 +122,16 @@ describe("deriveRefundableTipAmount", () => {
 
 describe("deriveRefundPrefillAmount", () => {
   test.each([
-    { remaining: 25_000, excess: 0, prefill: 25_000 },
-    { remaining: 50_000, excess: 25_000, prefill: 25_000 },
-    { remaining: 10_000, excess: 25_000, prefill: 10_000 },
+    { remaining: 25_000, returnable: 0, prefill: 25_000 },
+    { remaining: 50_000, returnable: 25_000, prefill: 25_000 },
+    { remaining: 10_000, returnable: 25_000, prefill: 10_000 },
   ])(
-    "prefills $prefill of $remaining left with $excess excess",
-    ({ remaining, excess, prefill }) => {
+    "prefills $prefill of $remaining left with $returnable of overpayment to return",
+    ({ remaining, returnable, prefill }) => {
       expect(
         deriveRefundPrefillAmount({
           remainingAmount: NonNegativeInteger(remaining),
-          excess: NonNegativeInteger(excess),
+          returnableOverpayment: NonNegativeInteger(returnable),
           method: "outside",
           currency: "CZK",
         })
@@ -171,7 +171,7 @@ describe("deriveRefundPrefillAmount", () => {
       expect(
         deriveRefundPrefillAmount({
           remainingAmount: NonNegativeInteger(remaining),
-          excess: NonNegativeInteger(0),
+          returnableOverpayment: NonNegativeInteger(0),
           method,
           currency,
         })

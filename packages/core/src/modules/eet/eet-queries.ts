@@ -6,7 +6,7 @@ import {
 } from "@evolu/common"
 
 import { createQuery } from "../../evolu/schema.ts"
-import type { BillId } from "../bill/bill-types.ts"
+import type { BillId, OverpaymentScope } from "../bill/bill-types.ts"
 import type { PaymentId } from "../payment/payment-types.ts"
 import { quotedAmountSatsSql } from "../shared/claimed-amount.ts"
 import type { EetDateTime, EetReversalId, EetSaleId } from "./eet-types.ts"
@@ -662,3 +662,27 @@ export const unconfirmedEetReversalsQuery = createQuery((db) =>
     .orderBy("eetReversal.saleAt", "desc")
     .$narrowType<EetReversalRequiredColumns>()
 )
+
+export const eetReportedGoodsQuery = (scope: OverpaymentScope) =>
+  createQuery((db) =>
+    db
+      .selectFrom("eetSale")
+      .innerJoin("payment", "payment.id", "eetSale.paymentId")
+      .select([
+        "eetSale.paymentId",
+        kyselySql<number>`sum("eetSale"."amount" - coalesce("eetSale"."reportedTipAmount", 0))`.as(
+          "reportedGoods"
+        ),
+      ])
+      .where((eb) =>
+        scope.billId === undefined
+          ? eb("payment.id", "=", scope.paymentId)
+          : eb("payment.billId", "=", scope.billId)
+      )
+      .where("eetSale.isDeleted", "is not", sqliteTrue)
+      .where("eetSale.unsupportedReason", "is", null)
+      .where("eetSale.paymentId", "is not", null)
+      .where("eetSale.amount", "is not", null)
+      .groupBy("eetSale.paymentId")
+      .$narrowType<{ paymentId: KyselyNotNull }>()
+  )

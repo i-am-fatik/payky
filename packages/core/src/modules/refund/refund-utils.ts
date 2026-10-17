@@ -1,6 +1,7 @@
 import { sqliteTrue } from "@evolu/common"
 
 import type { AccountTransactionId } from "../account-transaction/account-transaction-types.ts"
+import type { BillLineSummaryId } from "../bill-line/bill-line-types.ts"
 import type { ItemLineType } from "../item/item-types.ts"
 import {
   deriveReceivedTipAmount,
@@ -83,18 +84,18 @@ export const deriveRefundableTipAmount = ({
 
 export const deriveRefundPrefillAmount = ({
   remainingAmount,
-  excess,
+  returnableOverpayment,
   method,
   currency,
 }: {
   readonly remainingAmount: NonNegativeInteger
-  readonly excess: NonNegativeInteger
+  readonly returnableOverpayment: NonNegativeInteger
   readonly method: RefundMethod
   readonly currency: FiatCurrency
 }): NonNegativeInteger => {
   const amount =
-    excess > 0
-      ? NonNegativeInteger(Math.min(excess, remainingAmount))
+    returnableOverpayment > 0
+      ? NonNegativeInteger(Math.min(returnableOverpayment, remainingAmount))
       : remainingAmount
   if (method !== "cashRegister") return amount
 
@@ -237,3 +238,43 @@ export const calculateRefundLineAmount = (
           Math.round((line.totalAmount * quantity) / line.quantity)
         )
       )
+
+export const deriveRemovedLinesAmount = ({
+  paymentLines,
+  heldBySummaryId,
+  refundedLines,
+  chosenLines,
+}: {
+  readonly paymentLines: ReadonlyArray<{
+    readonly id: PaymentLineId
+    readonly summaryId: BillLineSummaryId
+    readonly totalAmount: NonNegativeInteger
+  }>
+  readonly heldBySummaryId: ReadonlyMap<BillLineSummaryId, NonNegativeInteger>
+  readonly refundedLines: ReadonlyArray<{
+    readonly paymentLineId: PaymentLineId
+    readonly amount: NonNegativeInteger
+  }>
+  readonly chosenLines: ReadonlyArray<{
+    readonly paymentLineId: PaymentLineId
+    readonly amount: NonNegativeInteger
+  }>
+}): NonNegativeInteger =>
+  NonNegativeInteger(
+    chosenLines.reduce((sum, chosen) => {
+      const line = paymentLines.find(({ id }) => id === chosen.paymentLineId)
+      if (line === undefined) return sum
+      const notHeld = Math.max(
+        0,
+        line.totalAmount - (heldBySummaryId.get(line.summaryId) ?? 0)
+      )
+      const refundedBefore = sumRefundAmounts(
+        refundedLines.filter(
+          ({ paymentLineId }) => paymentLineId === chosen.paymentLineId
+        )
+      )
+      return (
+        sum + Math.min(chosen.amount, Math.max(0, notHeld - refundedBefore))
+      )
+    }, 0)
+  )

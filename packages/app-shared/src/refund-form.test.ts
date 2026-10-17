@@ -115,7 +115,7 @@ describe("refund form", () => {
       deriveRefundAmountText({
         typedAmountText: null,
         remainingAmount: n(left),
-        excess: n(0),
+        returnableOverpayment: n(0),
         method,
         currency: "CZK",
       })
@@ -127,7 +127,7 @@ describe("refund form", () => {
       deriveRefundAmountText({
         typedAmountText: "12",
         remainingAmount: n(7890),
-        excess: n(0),
+        returnableOverpayment: n(0),
         method: "cashRegister",
         currency: "CZK",
       })

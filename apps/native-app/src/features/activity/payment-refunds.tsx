@@ -458,7 +458,7 @@ function RefundSheet({
   const amountText = deriveRefundAmountText({
     typedAmountText,
     remainingAmount,
-    excess,
+    returnableOverpayment: excess,
     method,
     currency,
   })

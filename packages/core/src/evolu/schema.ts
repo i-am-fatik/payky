@@ -68,6 +68,10 @@ import {
   monetaPluginSyncPointer,
 } from "../modules/moneta-plugin/moneta-plugin.ts"
 import {
+  overpaymentResolution,
+  overpaymentResolutionIndexes,
+} from "../modules/overpayment-resolution/overpayment-resolution.ts"
+import {
   payment,
   paymentBtc,
   paymentBtcLightning,
@@ -187,6 +191,7 @@ export const AppSchema = {
   refund,
   refundLine,
   qerkoTerminalRefundAttempt,
+  overpaymentResolution,
   withdrawal,
   withdrawalOnchain,
   withdrawalLightning,
@@ -224,6 +229,7 @@ export const createAppIndexes: IndexesConfig = (create) => [
   ...monetaPluginIndexes(create),
   ...eetIndexes(create),
   ...refundIndexes(create),
+  ...overpaymentResolutionIndexes(create),
   ...withdrawalIndexes(create),
   ...cashuIndexes(create),
   ...tableSelfPayIndexes(create),
