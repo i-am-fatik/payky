@@ -16,4 +16,6 @@ export const createRandomBillId = (): BillId => createRowId<"Bill">()
 
 export type BillCoverage = "paid" | "underpaid" | "overpaid"
 
+export type SyncClockHex = string
+
 export type BillStatus = "open" | "closed" | "canceled"
