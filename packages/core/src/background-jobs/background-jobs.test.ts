@@ -10,6 +10,7 @@ import {
   getBackgroundJobsForRuntime,
   nativeBackgroundJobs,
 } from "./background-jobs.ts"
+import { startBillClosingJob } from "./jobs/bill-closing-job.ts"
 import { startCashuAccountSyncJob } from "./jobs/cashu-account-sync-job.ts"
 import { startEetReportingJob } from "./jobs/eet-reporting-job.ts"
 import { startFioAccountTransactionSyncJob } from "./jobs/fio-account-transaction-sync-job.ts"
@@ -33,6 +34,7 @@ describe("getBackgroundJobsForRuntime", () => {
       startLightningAddressVerifyJob,
       startTableSelfPayPublishingJob,
       startSelfPayPointerJob,
+      startBillClosingJob,
     ])
   })
 
@@ -55,6 +57,7 @@ describe("getBackgroundJobsForRuntime", () => {
       startLightningAddressVerifyJob,
       startTableSelfPayPublishingJob,
       startSelfPayPointerJob,
+      startBillClosingJob,
       startQerkoPaymentConnectionJob,
       startQerkoPaymentSyncJob,
     ])

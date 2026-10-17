@@ -8,6 +8,10 @@ export const BillIdRaw = id("Bill")
 export const BillId = standardSchemaToZod(BillIdRaw)
 export type BillId = typeof BillIdRaw.Output
 
+export const BillClosingCursorIdRaw = id("BillClosingCursor")
+export const BillClosingCursorId = standardSchemaToZod(BillClosingCursorIdRaw)
+export type BillClosingCursorId = typeof BillClosingCursorIdRaw.Output
+
 /**
  * A fresh, client-generated `BillId` that hasn't been written to Evolu yet —
  * used to put a new cart's id in the `/bill` URL immediately, before its bill

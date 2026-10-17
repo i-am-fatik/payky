@@ -6,7 +6,11 @@ import { cancelBillDirectly } from "./support/collisions.ts"
 import { colorContrast } from "./support/color-contrast.ts"
 import { expect, screenshotDir, test } from "./support/fixtures.ts"
 import { nameParam, translate, translateParams } from "./support/i18n.ts"
-import { waitForLocalWriteToSettle } from "./support/navigation.ts"
+import {
+  gotoPage,
+  gotoPosOverview,
+  waitForLocalWriteToSettle,
+} from "./support/navigation.ts"
 import { seedOnboarding } from "./support/onboarding.ts"
 import {
   addBillLines,
@@ -635,6 +639,51 @@ test("the till charges only what guests have not paid, lines or no lines", async
       .getByRole("heading", { name: translate("en", "paymentTip.title") })
       .waitFor()
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("$81.00")
+  })
+})
+
+test("a table whose guest paid the beer reads partly paid, then free once staff remove the pizza", async ({
+  seededPage: page,
+  context,
+}) => {
+  test.setTimeout(120_000)
+  await routeFakeNostrRelays(context)
+  const { guestAddress, billId } =
+    await test.step("seed a table with self-pay and a bill of a pizza and a beer", () =>
+      seedPizzaAndBeerBill(page, "Table 12"))
+  const tableTile = page
+    .getByTestId("table-tile")
+    .filter({ hasText: "Table 12" })
+
+  await test.step("a guest pays all of the beer and the table reads partly paid", async () => {
+    const guest = await context.newPage()
+    await guest.goto(guestAddress)
+    await payAllOfTheBeer(page, guest)
+    await guest.close()
+    await gotoPosOverview(page, "en")
+    await expect(tableTile).toContainText(
+      translate("en", "tables.tile.partiallyPaid"),
+      { timeout: 30_000 }
+    )
+  })
+
+  await test.step("staff remove the pizza the guest left", async () => {
+    await page.goto(`/bill?billId=${billId}`)
+    await page
+      .getByRole("button", {
+        name: nameParam("bill.brick.remove.aria", "Pizza"),
+      })
+      .click()
+    await waitForLocalWriteToSettle(page)
+  })
+
+  await test.step("the table is free and the bill reads closed", async () => {
+    await gotoPosOverview(page, "en")
+    await expect(tableTile).toContainText(translate("en", "tables.tile.free"))
+    await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+    await expect(
+      page.getByText(translate("en", "bill.status.closed"), { exact: true })
+    ).toBeVisible()
   })
 })
 

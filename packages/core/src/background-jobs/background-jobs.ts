@@ -2,6 +2,7 @@ import type {
   AppBackgroundJob,
   CashuBackgroundJob,
 } from "./background-job-types.ts"
+import { startBillClosingJob } from "./jobs/bill-closing-job.ts"
 import { startCashuAccountSyncJob } from "./jobs/cashu-account-sync-job.ts"
 import { startEetReportingJob } from "./jobs/eet-reporting-job.ts"
 import { startFioAccountTransactionSyncJob } from "./jobs/fio-account-transaction-sync-job.ts"
@@ -26,6 +27,7 @@ export const cliBackgroundJobs = [
   startLightningAddressVerifyJob,
   startTableSelfPayPublishingJob,
   startSelfPayPointerJob,
+  startBillClosingJob,
 ] satisfies ReadonlyArray<AppBackgroundJob>
 
 export const nativeBackgroundJobs = [
@@ -52,6 +54,7 @@ const browserBackgroundJobs = [
   startLightningAddressVerifyJob,
   startTableSelfPayPublishingJob,
   startSelfPayPointerJob,
+  startBillClosingJob,
 ] satisfies ReadonlyArray<AppBackgroundJob>
 
 export function getBackgroundJobsForRuntime(

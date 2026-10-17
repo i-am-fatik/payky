@@ -8,8 +8,8 @@ import type { PaymentId } from "../payment/payment-types.ts"
 import { overpaymentRefundsQuery } from "../refund/refund-queries.ts"
 import type { EvoluDep } from "../shared/evolu-deps.ts"
 import {
-  firstWriteClocksQuery,
-  mapFirstWriteClocks,
+  mapWriteClocks,
+  writeClocksQuery,
 } from "../shared/evolu-history-queries.ts"
 import { NonNegativeInteger } from "../shared/schema.ts"
 import {
@@ -27,19 +27,25 @@ import {
 import type { OverpaymentScope, SyncClockHex } from "./bill-types.ts"
 import type { BillOverpaymentInput } from "./bill-utils.ts"
 
-const loadFirstWriteClocks =
-  <TId extends Id>(
-    table: keyof typeof AppSchema,
-    ids: ReadonlyArray<TId>,
-    column?: string
-  ): Task<ReadonlyMap<TId, SyncClockHex>, never, EvoluDep & EvoluOwnerDep> =>
+export const loadWriteClocks =
+  <TId extends Id>({
+    table,
+    ids,
+    column,
+    pick = "first",
+  }: {
+    readonly table: keyof typeof AppSchema
+    readonly ids: ReadonlyArray<TId>
+    readonly column?: string
+    readonly pick?: "first" | "last"
+  }): Task<ReadonlyMap<TId, SyncClockHex>, never, EvoluDep & EvoluOwnerDep> =>
   async (run) => {
     if (ids.length === 0) return ok(new Map())
     const { evolu, evoluOwner } = run.deps
     const rows = await evolu.loadQuery(
-      firstWriteClocksQuery({ ownerId: evoluOwner.id, table, column, ids })
+      writeClocksQuery({ ownerId: evoluOwner.id, table, column, ids, pick })
     )
-    return ok(mapFirstWriteClocks(ids, rows))
+    return ok(mapWriteClocks(ids, rows))
   }
 
 const loadOverpaymentTotal =
@@ -92,33 +98,30 @@ export const loadOverpaymentInput =
     const [claims, refundClocks, resolutionClocks, acknowledgements] =
       await Promise.all([
         run.ok(
-          loadFirstWriteClocks(
-            "reconciliationClaim",
-            transactions.map(({ claimId }) => claimId)
-          )
+          loadWriteClocks({
+            table: "reconciliationClaim",
+            ids: transactions.map(({ claimId }) => claimId),
+          })
         ),
         run.ok(
-          loadFirstWriteClocks(
-            "refund",
-            refunds.map(({ id }) => id)
-          )
+          loadWriteClocks({ table: "refund", ids: refunds.map(({ id }) => id) })
         ),
         run.ok(
-          loadFirstWriteClocks(
-            "overpaymentResolution",
-            resolutions.map(({ id }) => id)
-          )
+          loadWriteClocks({
+            table: "overpaymentResolution",
+            ids: resolutions.map(({ id }) => id),
+          })
         ),
         run.ok(
-          loadFirstWriteClocks(
-            "payment",
-            payments
+          loadWriteClocks({
+            table: "payment",
+            ids: payments
               .filter(
                 ({ excessAcknowledgedAt }) => excessAcknowledgedAt !== null
               )
               .map(({ id }) => id),
-            "excessAcknowledgedAt"
-          )
+            column: "excessAcknowledgedAt",
+          })
         ),
       ])
 

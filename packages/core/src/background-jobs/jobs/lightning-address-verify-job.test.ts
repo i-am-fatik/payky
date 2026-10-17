@@ -17,6 +17,7 @@ import {
 import { createRowId } from "../../modules/shared/evolu-utils.ts"
 import { testPreimage } from "../../modules/shared/lightning-invoice-test-fixtures.ts"
 import { createInProcessLockManager } from "../../runtime/in-process-lock-manager.ts"
+import { testSyncedAppOwner } from "../../testing/app-owner-sync.ts"
 import type { AppBackgroundJobContext } from "../background-job-types.ts"
 import {
   createLightningAddressVerifyJob,
@@ -69,6 +70,7 @@ const setup = async () => {
       tableSelfPayRoot: new Uint8Array(32),
       selfPayDefaultRelays: [],
       nostrRelayClient: createNostrRelayClient(),
+      ...testSyncedAppOwner,
       deviceId: createRowId<"Device">(),
       lockManager: createInProcessLockManager(),
       console: testCreateConsole(),

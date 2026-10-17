@@ -23,6 +23,7 @@ import {
 } from "../../modules/shared/schema.ts"
 import { createInProcessLockManager } from "../../runtime/in-process-lock-manager.ts"
 import { createFakeSparkWallet } from "../../spark/spark-wallet-test-fixtures.ts"
+import { testSyncedAppOwner } from "../../testing/app-owner-sync.ts"
 import { createTestDateDep } from "../../testing/date-dep.ts"
 import { createEvoluTest } from "../../testing/evolu.ts"
 import { evoluTestDeps } from "../../testing/evolu-deps.ts"
@@ -129,6 +130,7 @@ const setup = async () => {
       ...createQerkoConnectionStatusDep(),
       deviceId: createRowId<"Device">(),
       lockManager: createInProcessLockManager(),
+      ...testSyncedAppOwner,
       tableSelfPayRoot: new Uint8Array(32),
       selfPayDefaultRelays: [],
       nostrRelayClient: createNostrRelayClient(),
