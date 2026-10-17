@@ -1,4 +1,5 @@
 import type { IndexesConfig } from "@evolu/common/local-first"
+import { z } from "zod"
 
 import { DeviceId } from "../device/device-types.ts"
 import { PaymentId } from "../payment/payment-types.ts"
@@ -11,7 +12,12 @@ import {
   SqliteTrueSchema,
   TimestampMsSchema,
 } from "../shared/schema.ts"
-import { RefundId, RefundLineId, RefundMethodSchema } from "./refund-types.ts"
+import {
+  RefundId,
+  RefundLineId,
+  RefundMethodSchema,
+  RefundPurposeSchema,
+} from "./refund-types.ts"
 
 export const refund = {
   id: RefundId,
@@ -22,6 +28,10 @@ export const refund = {
   method: RefundMethodSchema,
   refundedAt: TimestampMsSchema,
   isTip: SqliteTrueSchema.nullable(),
+  purpose: RefundPurposeSchema.nullable(),
+  overpaymentAmount: NonNegativeIntegerSchema.nullable(),
+  knownTransactionIdsJson: z.string().nullable(),
+  mainRefundId: RefundId.nullable(),
 } as const
 
 export const refundLine = {

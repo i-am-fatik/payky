@@ -1,12 +1,14 @@
 import {
   evoluJsonArrayFrom,
   type KyselyNotNull,
+  kyselySql,
   sqliteTrue,
 } from "@evolu/common"
 
 import { createQuery } from "../../evolu/schema.ts"
-import type { BillId } from "../bill/bill-types.ts"
+import type { BillId, OverpaymentScope } from "../bill/bill-types.ts"
 import type { PaymentId } from "../payment/payment-types.ts"
+import type { NonNegativeInteger } from "../shared/schema.ts"
 
 const refundColumns = [
   "refund.id",
@@ -31,8 +33,14 @@ export const refundsByPaymentIdQuery = (paymentId: PaymentId) =>
   createQuery((db) =>
     db
       .selectFrom("refund")
-      .select(refundColumns)
+      .select([
+        ...refundColumns.filter((column) => column !== "refund.amount"),
+        kyselySql<NonNegativeInteger>`"refund"."amount" + coalesce((select sum("withoutDevice"."amount") from "refund" as "withoutDevice" where "withoutDevice"."mainRefundId" = "refund"."id" and "withoutDevice"."isDeleted" is not ${sqliteTrue}), 0)`.as(
+          "amount"
+        ),
+      ])
       .where("refund.paymentId", "=", paymentId)
+      .where("refund.mainRefundId", "is", null)
       .where("refund.isDeleted", "is not", sqliteTrue)
       .where("refund.amount", "is not", null)
       .where("refund.currency", "is not", null)
@@ -159,6 +167,9 @@ export const refundablePaymentLinesQuery = (paymentId: PaymentId) =>
       .innerJoin("item", "item.id", "paymentLine.itemId")
       .select([
         "paymentLine.id",
+        "paymentLine.billId",
+        "paymentLine.catalogItemId",
+        "paymentLine.itemId",
         "paymentLine.type",
         "paymentLine.quantity",
         "paymentLine.totalAmount",
@@ -195,4 +206,32 @@ export const otherClaimedPaymentOfBillQuery = (paymentId: PaymentId) =>
       .where("other.id", "!=", paymentId)
       .where("other.isDeleted", "is not", sqliteTrue)
       .limit(1)
+  )
+
+export const overpaymentRefundsQuery = (scope: OverpaymentScope) =>
+  createQuery((db) =>
+    db
+      .selectFrom("refund")
+      .innerJoin("payment", "payment.id", "refund.paymentId")
+      .select([
+        "refund.id",
+        "refund.paymentId",
+        "refund.deviceId",
+        "refund.amount",
+        "refund.isTip",
+        "refund.purpose",
+        "refund.overpaymentAmount",
+        "refund.knownTransactionIdsJson",
+        "refund.mainRefundId",
+      ])
+      .where((eb) =>
+        scope.billId === undefined
+          ? eb("payment.id", "=", scope.paymentId)
+          : eb("payment.billId", "=", scope.billId)
+      )
+      .where("payment.isDeleted", "is not", sqliteTrue)
+      .where("refund.isDeleted", "is not", sqliteTrue)
+      .where("refund.paymentId", "is not", null)
+      .where("refund.amount", "is not", null)
+      .$narrowType<{ paymentId: KyselyNotNull; amount: KyselyNotNull }>()
   )

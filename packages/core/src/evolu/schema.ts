@@ -60,6 +60,10 @@ import {
 import { item, itemIndexes } from "../modules/item/item.ts"
 import { legalEntity } from "../modules/legal-entity/legal-entity.ts"
 import {
+  overpaymentResolution,
+  overpaymentResolutionIndexes,
+} from "../modules/overpayment-resolution/overpayment-resolution.ts"
+import {
   payment,
   paymentBtc,
   paymentBtcLightning,
@@ -157,6 +161,7 @@ export const AppSchema = {
   eetReversalConfirmation,
   refund,
   refundLine,
+  overpaymentResolution,
   withdrawal,
   withdrawalOnchain,
   withdrawalLightning,
@@ -192,6 +197,7 @@ export const createAppIndexes: IndexesConfig = (create) => [
   ...fioPluginIndexes(create),
   ...eetIndexes(create),
   ...refundIndexes(create),
+  ...overpaymentResolutionIndexes(create),
   ...withdrawalIndexes(create),
   ...cashuIndexes(create),
   ...tableSelfPayIndexes(create),

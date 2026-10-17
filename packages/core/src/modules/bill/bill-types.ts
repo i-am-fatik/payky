@@ -1,5 +1,7 @@
 import { id } from "@evolu/common"
+import type { RequireExactlyOne } from "type-fest"
 import { standardSchemaToZod } from "../../zod-utils.ts"
+import type { PaymentId } from "../payment/payment-types.ts"
 import { createRowId } from "../shared/evolu-utils.ts"
 
 export const BillIdRaw = id("Bill")
@@ -17,5 +19,10 @@ export const createRandomBillId = (): BillId => createRowId<"Bill">()
 export type BillCoverage = "paid" | "underpaid" | "overpaid"
 
 export type SyncClockHex = string
+
+export type OverpaymentScope = RequireExactlyOne<{
+  readonly billId: BillId
+  readonly paymentId: PaymentId
+}>
 
 export type BillStatus = "open" | "closed" | "canceled"

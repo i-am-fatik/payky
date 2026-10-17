@@ -2,7 +2,7 @@ import type { KyselyNotNull } from "@evolu/common"
 import { sqliteTrue } from "@evolu/common"
 
 import { createQuery } from "../../evolu/schema.ts"
-import type { BillId } from "./bill-types.ts"
+import type { BillId, OverpaymentScope } from "./bill-types.ts"
 
 /**
  * Every payment for a bill that has an active reconciliation claim — money
@@ -114,4 +114,87 @@ export const paymentsByBillIdQuery = (billId: BillId) =>
       .select(["payment.id", "payment.canceledAt", "payment.expiresAt"])
       .where("payment.billId", "=", billId)
       .where("payment.isDeleted", "is not", sqliteTrue)
+  )
+
+export const overpaymentPaymentsQuery = (scope: OverpaymentScope) =>
+  createQuery((db) =>
+    db
+      .selectFrom("payment")
+      .leftJoin("paymentCashRegister", (join) =>
+        join
+          .onRef("paymentCashRegister.id", "=", "payment.id")
+          .on("paymentCashRegister.isDeleted", "is not", sqliteTrue)
+      )
+      .select([
+        "payment.id",
+        "payment.amount",
+        "payment.tipAmount",
+        "payment.currency",
+        "payment.excessAcknowledgedAt",
+        "paymentCashRegister.receivedAmount as cashReceivedAmount",
+      ])
+      .where((eb) =>
+        scope.billId === undefined
+          ? eb("payment.id", "=", scope.paymentId)
+          : eb("payment.billId", "=", scope.billId)
+      )
+      .where("payment.isDeleted", "is not", sqliteTrue)
+      .where("payment.amount", "is not", null)
+      .where("payment.tipAmount", "is not", null)
+      .where("payment.currency", "is not", null)
+      .$narrowType<{
+        amount: KyselyNotNull
+        tipAmount: KyselyNotNull
+        currency: KyselyNotNull
+      }>()
+  )
+
+export const overpaymentTransactionsQuery = (scope: OverpaymentScope) =>
+  createQuery((db) =>
+    db
+      .selectFrom("payment")
+      .innerJoin("reconciliationClaim", (join) =>
+        join
+          .onRef("reconciliationClaim.paymentId", "=", "payment.id")
+          .on("reconciliationClaim.isDeleted", "is not", sqliteTrue)
+      )
+      .innerJoin(
+        "accountTransaction",
+        "accountTransaction.id",
+        "reconciliationClaim.accountTransactionId"
+      )
+      .leftJoin("paymentBtc", (join) =>
+        join
+          .onRef("paymentBtc.id", "=", "payment.id")
+          .on("paymentBtc.isDeleted", "is not", sqliteTrue)
+      )
+      .select([
+        "reconciliationClaim.id as claimId",
+        "payment.id as paymentId",
+        "payment.amount as paymentAmount",
+        "payment.currency as paymentCurrency",
+        "paymentBtc.amountSats as paymentAmountSats",
+        "reconciliationClaim.accountTransactionId",
+        "accountTransaction.amount",
+        "accountTransaction.currency",
+      ])
+      .where((eb) =>
+        scope.billId === undefined
+          ? eb("payment.id", "=", scope.paymentId)
+          : eb("payment.billId", "=", scope.billId)
+      )
+      .where("payment.isDeleted", "is not", sqliteTrue)
+      .where("payment.amount", "is not", null)
+      .where("payment.currency", "is not", null)
+      .where("reconciliationClaim.accountTransactionId", "is not", null)
+      .where("accountTransaction.isDeleted", "is not", sqliteTrue)
+      .where("accountTransaction.amount", "is not", null)
+      .where("accountTransaction.currency", "is not", null)
+      .$narrowType<{
+        paymentAmount: KyselyNotNull
+        paymentCurrency: KyselyNotNull
+        accountTransactionId: KyselyNotNull
+        amount: KyselyNotNull
+        currency: KyselyNotNull
+      }>()
   )

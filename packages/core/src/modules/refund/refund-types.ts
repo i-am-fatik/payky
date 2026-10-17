@@ -13,4 +13,7 @@ export type RefundLineId = typeof RefundLineIdRaw.Output
 export const RefundMethodSchema = z.enum(["cashRegister", "outside"])
 export type RefundMethod = z.output<typeof RefundMethodSchema>
 
+export const RefundPurposeSchema = z.enum(["overpayment", "goods"])
+export type RefundPurpose = z.output<typeof RefundPurposeSchema>
+
 export type RefundState = "none" | "partial" | "full"

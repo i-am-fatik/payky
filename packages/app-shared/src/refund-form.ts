@@ -48,6 +48,7 @@ export const refundMethodLabelKey = {
 
 export const refundErrorKeys = {
   PaymentNotFound: "paymentDetail.notFound",
+  BillNotFound: "billDetail.notFound",
   RefundPaymentNotPaid: "refund.error.notPaid",
   RefundAmountInvalid: "refund.error.amount",
   RefundItemsUnavailable: "refund.error.items",
@@ -126,13 +127,13 @@ export const deriveRefundAvailability = ({
 export const deriveRefundAmountText = ({
   typedAmountText,
   remainingAmount,
-  excess,
+  returnableOverpayment,
   method,
   currency,
 }: {
   readonly typedAmountText: string | null
   readonly remainingAmount: NonNegativeInteger
-  readonly excess: NonNegativeInteger
+  readonly returnableOverpayment: NonNegativeInteger
   readonly method: RefundMethod
   readonly currency: FiatCurrency
 }): string =>
@@ -140,7 +141,7 @@ export const deriveRefundAmountText = ({
   minorUnitsToDecimalString({
     value: deriveRefundPrefillAmount({
       remainingAmount,
-      excess,
+      returnableOverpayment,
       method,
       currency,
     }),

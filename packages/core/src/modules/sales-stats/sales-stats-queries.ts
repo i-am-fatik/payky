@@ -230,7 +230,9 @@ export const refundsQuery = (range: StatsRange) =>
         >`case when "refund"."isTip" = ${sqliteTrue} then 1 else 0 end`.as(
           "isTip"
         ),
-        kyselySql<number>`count(*)`.as("count"),
+        kyselySql<number>`sum(case when "refund"."mainRefundId" is null then 1 else 0 end)`.as(
+          "count"
+        ),
         kyselySql<number>`sum("refund"."amount")`.as("amount"),
       ])
       .where("refund.refundedAt", ">=", fromMs)
