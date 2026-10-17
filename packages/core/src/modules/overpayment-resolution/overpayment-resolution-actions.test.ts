@@ -84,7 +84,9 @@ describe("Staff resolves an overpayment", () => {
       },
     })
     await expect(
-      context.evolu.loadQuery(overpaymentResolutionsQuery({ billId }))
+      context.evolu.loadQuery(
+        overpaymentResolutionsQuery({ billIds: [billId], paymentIds: [] })
+      )
     ).resolves.toEqual([])
   })
 

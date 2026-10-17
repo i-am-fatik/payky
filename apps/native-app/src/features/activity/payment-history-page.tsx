@@ -1,4 +1,5 @@
 import {
+  deriveOverpaymentEntry,
   derivePaymentHistoryRowState,
   formatActivityDayTitle,
   hasAnyIssue,
@@ -11,6 +12,7 @@ import { formatTime } from "@payky/app-shared/format-date"
 import { formatMoney } from "@payky/app-shared/format-money"
 import { groupByDay } from "@payky/app-shared/group-by-day"
 import { useNow } from "@payky/app-shared/use-now"
+import { deriveBillOverpayment } from "@payky/core/modules/bill/bill-utils"
 import { latestPaymentsQuery } from "@payky/core/modules/payment/payment-queries"
 import { refundSummariesQuery } from "@payky/core/modules/refund/refund-queries"
 import { summarizeRefundsByPayment } from "@payky/core/modules/refund/refund-utils"
@@ -18,6 +20,7 @@ import { useEvoluQuery } from "../../hooks/use-evolu-query.ts"
 import { useInfiniteEvoluQuery } from "../../hooks/use-infinite-evolu-query.ts"
 import { useLocale, useTranslation } from "../../hooks/use-translation.ts"
 import { RefundBadge } from "../shared/refund-badge.tsx"
+import { useOverpaymentInputs } from "../shared/use-overpayment-input.ts"
 import {
   type ActivityGroup,
   ActivityList,
@@ -43,13 +46,25 @@ function PaymentHistory() {
     latestPaymentsQuery
   )
   const refunds = useEvoluQuery(refundSummariesQuery).data
+  const overpaymentInputs = useOverpaymentInputs(
+    rows.flatMap((item) => {
+      const entry = deriveOverpaymentEntry(item)
+      return entry === null ? [] : [entry]
+    })
+  )
+  const hasUnresolvedOverpayment = (item: PaymentHistoryRow) => {
+    const input = overpaymentInputs.get(item.billId ?? item.id)
+    return input !== undefined && deriveBillOverpayment(input).unresolved > 0
+  }
   const refundsByPayment = summarizeRefundsByPayment(refunds)
   // Nothing writes a row when a payment expires, so the clock has to tick on
   // its own or a listed pending payment never becomes Expired.
   const now = useNow(rows.map((row) => row.expiresAt))
+  const stateOf = (item: PaymentHistoryRow) =>
+    derivePaymentHistoryRowState(item, now, hasUnresolvedOverpayment(item))
 
   const toRow = (item: PaymentHistoryRow): ActivityRowData => {
-    const state = derivePaymentHistoryRowState(item, now)
+    const state = stateOf(item)
     const details = [
       formatTime(new Date(item.createdAt), locale),
       item.tableName,
@@ -104,9 +119,7 @@ function PaymentHistory() {
         now,
         locale,
         amounts: group.items
-          .filter(
-            (item) => derivePaymentHistoryRowState(item, now).status === "paid"
-          )
+          .filter((item) => stateOf(item).status === "paid")
           .map((item) => ({ value: item.amount, currency: item.currency })),
         isComplete: !hasMore || groupIndex < dayGroups.length - 1,
       }),

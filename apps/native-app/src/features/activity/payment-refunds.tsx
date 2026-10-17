@@ -13,7 +13,10 @@ import {
   tipRefundErrorKeys,
 } from "@payky/app-shared/refund-form"
 import type { BillId } from "@payky/core/modules/bill/bill-types"
+import { deriveReturnableOverpayment } from "@payky/core/modules/bill/bill-utils"
+import { paymentDetailQuery } from "@payky/core/modules/payment/payment-queries"
 import type { PaymentId } from "@payky/core/modules/payment/payment-types"
+import { activeClaimedTransactionsByPaymentIdQuery } from "@payky/core/modules/reconciliation-claim/reconciliation-claim-queries"
 import {
   refundPayment,
   refundPaymentTip,
@@ -24,14 +27,18 @@ import {
   refundLinesByPaymentIdQuery,
   refundsByPaymentIdQuery,
 } from "@payky/core/modules/refund/refund-queries"
-import type { RefundMethod } from "@payky/core/modules/refund/refund-types"
+import type {
+  RefundMethod,
+  RefundPurpose,
+} from "@payky/core/modules/refund/refund-types"
 import {
   isTipRefund,
   type RefundableLine,
   sumGoodsRefundAmounts,
 } from "@payky/core/modules/refund/refund-utils"
-import type {
-  FiatCurrency,
+import { calculatePaymentExcess } from "@payky/core/modules/shared/claimed-amount"
+import {
+  type FiatCurrency,
   NonNegativeInteger,
 } from "@payky/core/modules/shared/schema"
 import { useAtomValue } from "jotai"
@@ -76,6 +83,119 @@ import { useToast } from "../../hooks/use-toast.ts"
 import { useLocale, useTranslation } from "../../hooks/use-translation.ts"
 import { fontSize, fontWeight } from "../../theme/tokens.ts"
 import { RefundBadge } from "../shared/refund-badge.tsx"
+import { useOverpaymentInput } from "../shared/use-overpayment-input.ts"
+import { ChoiceToggleItem } from "./choice-toggle-item.tsx"
+
+interface RefundablePayment {
+  readonly id: PaymentId
+  readonly billId: BillId | null
+  readonly amount: NonNegativeInteger
+  readonly tipAmount: NonNegativeInteger
+  readonly currency: FiatCurrency
+  readonly cashReceivedAmount: NonNegativeInteger | null
+}
+
+function usePaymentRefundState({
+  payment,
+  excess,
+  isPaid,
+}: {
+  readonly payment: RefundablePayment
+  readonly excess: NonNegativeInteger
+  readonly isPaid: boolean
+}) {
+  const refunds = useEvoluQuery(refundsByPaymentIdQuery(payment.id)).data
+  const refundLines = useEvoluQuery(
+    refundLinesByPaymentIdQuery(payment.id)
+  ).data
+  const paymentLines = useEvoluQuery(
+    refundablePaymentLinesQuery(payment.id)
+  ).data
+  const otherClaimedPayments = useEvoluQuery(
+    otherClaimedPaymentOfBillQuery(payment.id)
+  ).data
+  const overpaymentInput = useOverpaymentInput(
+    payment.billId === null
+      ? { paymentId: payment.id }
+      : { billId: payment.billId }
+  )
+  return {
+    refunds,
+    refundLines,
+    returnableOverpayment:
+      overpaymentInput === undefined
+        ? NonNegativeInteger(0)
+        : deriveReturnableOverpayment(overpaymentInput, payment.id),
+    ...deriveRefundAvailability({
+      payment,
+      excess,
+      isPaid,
+      refunds,
+      refundLines,
+      paymentLines,
+      hasOtherClaimedPayment: otherClaimedPayments.length > 0,
+    }),
+  }
+}
+
+/** Web's `PaymentRefundDialog`: the refund dialog of one payment, opened from the overpayment card. */
+export function PaymentRefundDialog({
+  paymentId,
+  billLabel,
+  defaultMethod,
+  onClose,
+}: {
+  readonly paymentId: PaymentId
+  readonly billLabel: string
+  readonly defaultMethod: RefundMethod
+  readonly onClose: () => void
+}) {
+  const [payment] = useEvoluQuery(paymentDetailQuery(paymentId)).data
+  const claims = useEvoluQuery(
+    activeClaimedTransactionsByPaymentIdQuery(paymentId)
+  ).data
+  if (payment === undefined) return null
+
+  return (
+    <LoadedPaymentRefundDialog
+      payment={payment}
+      excess={calculatePaymentExcess({ claims, amount: payment.amount })}
+      billLabel={billLabel}
+      defaultMethod={defaultMethod}
+      onClose={onClose}
+    />
+  )
+}
+
+function LoadedPaymentRefundDialog({
+  payment,
+  excess,
+  billLabel,
+  defaultMethod,
+  onClose,
+}: {
+  readonly payment: RefundablePayment
+  readonly excess: NonNegativeInteger
+  readonly billLabel: string
+  readonly defaultMethod: RefundMethod
+  readonly onClose: () => void
+}) {
+  const state = usePaymentRefundState({ payment, excess, isPaid: true })
+
+  return (
+    <RefundSheet
+      paymentId={payment.id}
+      billLabel={billLabel}
+      currency={payment.currency}
+      remainingAmount={state.remainingAmount}
+      returnableOverpayment={state.returnableOverpayment}
+      refundableLines={state.refundableLines}
+      tipAmount={state.refundableTipAmount}
+      defaultMethod={defaultMethod}
+      onClose={onClose}
+    />
+  )
+}
 
 /**
  * Native counterpart of web's `PaymentDetailRefunds`: the refunds already
@@ -90,14 +210,7 @@ export function PaymentRefunds({
   isPaid,
   defaultMethod,
 }: {
-  readonly payment: {
-    readonly id: PaymentId
-    readonly billId: BillId | null
-    readonly amount: NonNegativeInteger
-    readonly tipAmount: NonNegativeInteger
-    readonly currency: FiatCurrency
-    readonly cashReceivedAmount: NonNegativeInteger | null
-  }
+  readonly payment: RefundablePayment
   readonly excess: NonNegativeInteger
   readonly isPaid: boolean
   readonly defaultMethod: RefundMethod
@@ -105,32 +218,17 @@ export function PaymentRefunds({
   const { t } = useTranslation()
   const locale = useLocale()
   const [sheet, setSheet] = useState<"goods" | "tip" | null>(null)
-  const refunds = useEvoluQuery(refundsByPaymentIdQuery(payment.id)).data
-  const refundLines = useEvoluQuery(
-    refundLinesByPaymentIdQuery(payment.id)
-  ).data
-  const paymentLines = useEvoluQuery(
-    refundablePaymentLinesQuery(payment.id)
-  ).data
-  const otherClaimedPayments = useEvoluQuery(
-    otherClaimedPaymentOfBillQuery(payment.id)
-  ).data
   const {
+    refunds,
+    refundLines,
+    returnableOverpayment,
     refundableAmount,
     remainingAmount,
     refundableTipAmount,
     refundableLines,
     canRefund,
     canRefundTip,
-  } = deriveRefundAvailability({
-    payment,
-    excess,
-    isPaid,
-    refunds,
-    refundLines,
-    paymentLines,
-    hasOtherClaimedPayment: otherClaimedPayments.length > 0,
-  })
+  } = usePaymentRefundState({ payment, excess, isPaid })
   const money = (value: NonNegativeInteger) =>
     formatMoney({ value, currency: payment.currency }, locale)
 
@@ -233,9 +331,10 @@ export function PaymentRefunds({
       {sheet === "goods" ? (
         <RefundSheet
           paymentId={payment.id}
+          billLabel={null}
           currency={payment.currency}
           remainingAmount={remainingAmount}
-          excess={excess}
+          returnableOverpayment={returnableOverpayment}
           refundableLines={refundableLines}
           tipAmount={refundableTipAmount}
           defaultMethod={defaultMethod}
@@ -297,18 +396,20 @@ function Sheet({
 
 function RefundSheet({
   paymentId,
+  billLabel,
   currency,
   remainingAmount,
-  excess,
+  returnableOverpayment,
   refundableLines,
   tipAmount,
   defaultMethod,
   onClose,
 }: {
   readonly paymentId: PaymentId
+  readonly billLabel: string | null
   readonly currency: FiatCurrency
   readonly remainingAmount: NonNegativeInteger
-  readonly excess: NonNegativeInteger
+  readonly returnableOverpayment: NonNegativeInteger
   readonly refundableLines: ReadonlyArray<RefundableLine<RefundablePaymentLine>>
   readonly tipAmount: NonNegativeInteger
   readonly defaultMethod: RefundMethod
@@ -322,13 +423,17 @@ function RefundSheet({
   const { device } = useAtomValue(accountAtom)
   const [mode, setMode] = useState<RefundMode>("amount")
   const [method, setMethod] = useState<RefundMethod>(defaultMethod)
+  const asksPurpose = returnableOverpayment > 0 && mode === "amount"
+  const [purpose, setPurpose] = useState<RefundPurpose>(
+    returnableOverpayment > 0 ? "overpayment" : "goods"
+  )
   const [typedAmountText, setTypedAmountText] = useState<string | null>(null)
   const [quantities, setQuantities] = useState<RefundQuantities>({})
   const [pending, setPending] = useState(false)
   const amountText = deriveRefundAmountText({
     typedAmountText,
     remainingAmount,
-    returnableOverpayment: excess,
+    returnableOverpayment,
     method,
     currency,
   })
@@ -347,13 +452,26 @@ function RefundSheet({
     if (refundAmount === null || pending) return
     // Here rather than where the sheet opens: every refund ends in this
     // confirm (access/0002).
-    if (!(await require("refund", "access.action.refund"))) return
+    const detail =
+      billLabel === null
+        ? undefined
+        : t("overpayment.pinDetail", {
+            action: t("refund.dialog.confirm", { amount: money(refundAmount) }),
+            bill: billLabel,
+          })
+    if (!(await require("refund", "access.action.refund", detail))) return
     setPending(true)
     const refunded = await runToast(async (run) => {
       const result = await run(
         refundPayment(
           mode === "amount"
-            ? { paymentId, method, deviceId: device.id, amount: refundAmount }
+            ? {
+                paymentId,
+                method,
+                deviceId: device.id,
+                amount: refundAmount,
+                purpose: asksPurpose ? purpose : "goods",
+              }
             : {
                 paymentId,
                 method,
@@ -427,6 +545,32 @@ function RefundSheet({
             {t("refund.dialog.mode.items")}
           </ToggleGroupItem>
         </ToggleGroup>
+      ) : null}
+
+      {asksPurpose ? (
+        <FieldSet>
+          <FieldLegend variant="label">
+            {t("refund.dialog.purpose.label")}
+          </FieldLegend>
+          <ToggleGroup
+            aria-label={t("refund.dialog.purpose.label")}
+            value={purpose}
+            onValueChange={setPurpose}
+            variant="outline"
+            orientation="vertical"
+            disabled={pending}
+          >
+            <ChoiceToggleItem
+              value="overpayment"
+              selected={purpose === "overpayment"}
+            >
+              {t("refund.dialog.purpose.overpayment")}
+            </ChoiceToggleItem>
+            <ChoiceToggleItem value="goods" selected={purpose === "goods"}>
+              {t("refund.dialog.purpose.goods")}
+            </ChoiceToggleItem>
+          </ToggleGroup>
+        </FieldSet>
       ) : null}
 
       {mode === "amount" ? (
@@ -647,12 +791,15 @@ function MethodChoice({
         orientation="vertical"
         disabled={disabled}
       >
-        <ToggleGroupItem value="cashRegister" justify="flex-start">
+        <ChoiceToggleItem
+          value="cashRegister"
+          selected={method === "cashRegister"}
+        >
           {t("refund.dialog.method.cashRegister")}
-        </ToggleGroupItem>
-        <ToggleGroupItem value="outside" justify="flex-start">
+        </ChoiceToggleItem>
+        <ChoiceToggleItem value="outside" selected={method === "outside"}>
           {t("refund.dialog.method.outside")}
-        </ToggleGroupItem>
+        </ChoiceToggleItem>
       </ToggleGroup>
     </FieldSet>
   )

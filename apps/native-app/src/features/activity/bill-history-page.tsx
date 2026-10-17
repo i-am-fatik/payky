@@ -11,7 +11,8 @@ import { formatMoney } from "@payky/app-shared/format-money"
 import { groupByDay } from "@payky/app-shared/group-by-day"
 import { useNow } from "@payky/app-shared/use-now"
 import { latestBillsQuery } from "@payky/core/modules/bill/bill-queries"
-import type { BillStatus } from "@payky/core/modules/bill/bill-types"
+import type { BillId, BillStatus } from "@payky/core/modules/bill/bill-types"
+import { deriveBillOverpayment } from "@payky/core/modules/bill/bill-utils"
 import { NonNegativeInteger } from "@payky/core/modules/shared/schema"
 import type { LucideIcon } from "lucide-react-native"
 import Check from "lucide-react-native/icons/check"
@@ -24,6 +25,7 @@ import { useInfiniteEvoluQuery } from "../../hooks/use-infinite-evolu-query.ts"
 import { useLocale, useTranslation } from "../../hooks/use-translation.ts"
 import type { ThemeColor } from "../../theme/themes.ts"
 import { radius } from "../../theme/tokens.ts"
+import { useOverpaymentInputs } from "../shared/use-overpayment-input.ts"
 import {
   type ActivityGroup,
   ActivityList,
@@ -91,6 +93,19 @@ function BillHistory() {
     bill,
     summary: summarizeBillHistoryRow(bill),
   }))
+  const overpaymentInputs = useOverpaymentInputs(
+    summarized
+      .filter(({ summary }) => summary.coverage === "overpaid")
+      .map(({ bill, summary }) => ({
+        billId: bill.id,
+        billTotal: summary.billTotal,
+        isCanceled: summary.status === "canceled",
+      }))
+  )
+  const hasUnresolvedOverpayment = (billId: BillId) => {
+    const input = overpaymentInputs.get(billId)
+    return input !== undefined && deriveBillOverpayment(input).unresolved > 0
+  }
 
   const toRow = ({
     bill,
@@ -120,7 +135,11 @@ function BillHistory() {
       methodKinds: bill.claimedTransactions.map(
         (transaction) => transaction.transactionKind
       ),
-      issues: billHistoryIssueLabels(summary, t),
+      issues: billHistoryIssueLabels(
+        summary,
+        t,
+        hasUnresolvedOverpayment(bill.id)
+      ),
       statusIcon: (
         <BillStatusIcon
           status={summary.status}

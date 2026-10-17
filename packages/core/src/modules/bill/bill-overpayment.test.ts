@@ -18,6 +18,7 @@ import {
   type BillOverpaymentInput,
   deriveBillHistoryItemSummary,
   deriveBillOverpayment,
+  deriveOverpaymentTip,
   deriveRefundOverpaymentAmount,
   deriveReturnableOverpayment,
   type OverpaymentPayment,
@@ -280,6 +281,20 @@ describe("What each resolution answers", () => {
     })
 
     expect(bill.derive().unresolved).toBe(0)
+  })
+
+  test("Tip confirmed", () => {
+    const bill = createOverpaymentSimulation(50_000)
+    const guest = bill.addPayment("guest", 50_000)
+    const other = bill.addPayment("other", 0)
+    bill.pay(guest, 52_500)
+    const tip = bill.recordResolution("tip", guest, 2_000)
+    bill.recordResolution("kept", guest, 500)
+
+    expect(deriveOverpaymentTip(bill.derive(), guest)).toBe(2_000)
+    expect(deriveOverpaymentTip(bill.derive(), other)).toBe(0)
+    if (tip !== null) bill.withdraw(tip)
+    expect(deriveOverpaymentTip(bill.derive(), guest)).toBe(0)
   })
 
   test("Goodwill refund on an overpaid bill", () => {

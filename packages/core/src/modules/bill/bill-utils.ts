@@ -709,6 +709,23 @@ export const deriveBillOverpayment = (
   }
 }
 
+export const deriveOverpaymentTip = (
+  overpayment: BillOverpayment,
+  paymentId: PaymentId
+): NonNegativeInteger =>
+  NonNegativeInteger(
+    sumOf(
+      overpayment.answers
+        .filter(
+          (answer) =>
+            answer.source.type === "tip" &&
+            !answer.isWithdrawn &&
+            answer.paymentId === paymentId
+        )
+        .map(({ answered }) => answered)
+    )
+  )
+
 export const deriveRefundOverpaymentAmount = (
   input: BillOverpaymentInput,
   refund: {

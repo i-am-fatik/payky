@@ -1,3 +1,5 @@
+import type { Locator, Page } from "@playwright/test"
+
 import {
   addCatalogItem,
   addTable,
@@ -5,22 +7,104 @@ import {
   startNewBill,
 } from "./support/bill.ts"
 import {
+  createAndPaySecondPayment,
   simulateBillModifiedDuringPayment,
   simulateCancelAfterClaim,
+  simulateDuplicateSettlement,
   startCollisionBill,
 } from "./support/collisions.ts"
 import { expect, screenshotDir, test } from "./support/fixtures.ts"
-import { nameParam, translate } from "./support/i18n.ts"
-import { gotoPage } from "./support/navigation.ts"
+import { nameParam, translate, translateParams } from "./support/i18n.ts"
+import { gotoPage, waitForLocalWriteToSettle } from "./support/navigation.ts"
+import {
+  confirmRefund,
+  openOverpaymentResolution,
+  openOverpaymentReturn,
+  overpaidByPattern,
+  overpaymentCard,
+  resolveOverpayment,
+  withdrawOverpaymentAnswer,
+} from "./support/overpayment.ts"
 import {
   markCashPaid,
   markCashPaidAndSettle,
+  openRefundDialog,
+  prepareIbanPayment,
   startBillAndBeginCashPayment,
 } from "./support/payment.ts"
 
 /** Locates a bill's row in the `/activity/bills` list by its id. */
 const billRow = (page: Parameters<typeof markCashPaid>[0], billId: string) =>
   page.locator("nav").locator(`a[href$="/${billId}"]`)
+
+const startOverpaidBill = async (page: Page): Promise<string> => {
+  await addCatalogItem(page, "en", { name: "Coffee", price: "5" })
+  const billId = await startBillAndBeginCashPayment(page, "en")
+  await simulateBillModifiedDuringPayment(page, billId, "removeAll")
+  await markCashPaidAndSettle(page, "en")
+  return billId
+}
+
+const switchToCzech = async (page: Page): Promise<void> => {
+  await gotoPage(page, "/settings/language", "en", "settings.language.title")
+  const czech = page.getByRole("button", { name: "Čeština" })
+  await czech.click()
+  await expect(czech).toHaveAttribute("aria-pressed", "true")
+  await waitForLocalWriteToSettle(page)
+}
+
+const isClipped = (locator: Locator): Promise<boolean> =>
+  locator.evaluate((element) => element.scrollWidth > element.clientWidth)
+
+const expectReadableTarget = async (target: Locator): Promise<void> => {
+  await expect(target).toBeVisible()
+  expect(await isClipped(target)).toBe(false)
+  expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
+}
+
+const pickContrast = async (
+  picked: Locator,
+  unpicked: Locator
+): Promise<number> => {
+  const unpickedHandle = await unpicked.elementHandle()
+  return picked.locator("svg").evaluate((mark, other) => {
+    const context = document
+      .createElement("canvas")
+      .getContext("2d", { willReadFrequently: true })
+    if (context === null || other === null) {
+      throw new Error("Cannot measure the contrast")
+    }
+    const rgba = (color: string) => {
+      context.clearRect(0, 0, 1, 1)
+      context.fillStyle = color
+      context.fillRect(0, 0, 1, 1)
+      return context.getImageData(0, 0, 1, 1).data
+    }
+    const opaqueBackgroundOf = (element: Element | null): Uint8ClampedArray => {
+      if (element === null) return rgba("white")
+      const color = rgba(getComputedStyle(element).backgroundColor)
+      return color[3] === 255
+        ? color
+        : opaqueBackgroundOf(element.parentElement)
+    }
+    const luminance = (color: Uint8ClampedArray) => {
+      const [r = 0, g = 0, b = 0] = [color[0], color[1], color[2]].map(
+        (channel = 0) => {
+          const value = channel / 255
+          return value <= 0.04045
+            ? value / 12.92
+            : ((value + 0.055) / 1.055) ** 2.4
+        }
+      )
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const [lighter, darker] = [
+      luminance(rgba(getComputedStyle(mark).color)),
+      luminance(opaqueBackgroundOf(other)),
+    ].sort((a, b) => b - a)
+    return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05)
+  }, unpickedHandle)
+}
 
 test("the bills list shows an ordinary open bill with nothing paid yet", async ({
   seededPage: page,
@@ -273,13 +357,9 @@ test("the bills list and detail page show an overpaid bill when another device s
     })
   })
 
-  await test.step("the detail page shows the overpaid coverage message", async () => {
+  await test.step("the detail page shows the overpayment card", async () => {
     await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
-    await expect(
-      page.getByText(
-        translate("en", "paymentDetail.bill.coverage.overpaid.title")
-      )
-    ).toBeVisible()
+    await expect(overpaymentCard(page)).toContainText(overpaidByPattern("en"))
     await page.screenshot({
       path: `${screenshotDir}/activity-bill-detail-overpaid.png`,
       fullPage: true,
@@ -351,5 +431,397 @@ test("a payment individually canceled after being claimed shows a warning icon i
   await page.screenshot({
     path: `${screenshotDir}/activity-bill-detail-payment-collision.png`,
     fullPage: true,
+  })
+})
+
+test("the bill detail's overpayment card returns, tips, keeps and withdraws money paid above the bill", async ({
+  seededPage: page,
+}) => {
+  test.slow()
+  await addCatalogItem(page, "en", { name: "Coffee", price: "5" })
+  const billId = await startBillAndBeginCashPayment(page, "en")
+  await simulateBillModifiedDuringPayment(page, billId, "removeAll")
+  await markCashPaidAndSettle(page, "en")
+  await gotoPage(page, "/activity/bills", "en", "activity.title")
+  await expect(billRow(page, billId)).toContainText(
+    translate("en", "billHistory.overpaid")
+  )
+  await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+  const card = overpaymentCard(page)
+  await expect(card).toContainText(/5[.,]00/u)
+
+  await test.step("a tip the guest left counts against the overpayment", async () => {
+    await resolveOverpayment(page, "en", { kind: "tip", amount: "2" })
+    await expect(card).toContainText(overpaidByPattern("en"))
+    await expect(card).toContainText(/3[.,]00/u)
+  })
+
+  await test.step("withdrawing the tip leaves the money unresolved again", async () => {
+    await withdrawOverpaymentAnswer(page, "en", "overpayment.breakdown.tip")
+    await expect(card).toContainText(
+      translate("en", "overpayment.breakdown.withdrawn")
+    )
+    await expect(card).toContainText(/5[.,]00/u)
+  })
+
+  await test.step("keeping part of it lowers what is unresolved", async () => {
+    await resolveOverpayment(page, "en", { kind: "kept", amount: "1" })
+    await expect(card).toContainText(/4[.,]00/u)
+  })
+
+  await test.step("returning the rest resolves it, prefilled as a return", async () => {
+    const dialog = await openOverpaymentReturn(page, "en")
+    await expect(
+      dialog.getByLabel(translate("en", "refund.dialog.amount.label"))
+    ).toHaveValue(/^4([.,]00)?$/u)
+    await expect(
+      dialog.getByRole("button", {
+        name: translate("en", "refund.dialog.purpose.overpayment"),
+      })
+    ).toHaveAttribute("aria-pressed", "true")
+    await confirmRefund(dialog, "en")
+    await expect(card).toContainText(
+      translate("en", "overpayment.resolved.title")
+    )
+    await page.screenshot({
+      path: `${screenshotDir}/activity-bill-detail-overpayment-resolved.png`,
+      fullPage: true,
+    })
+  })
+
+  await test.step("the resolved breakdown adds up, the withdrawn tip struck from it", async () => {
+    await expect(card).toContainText(
+      translateParams("en", "overpayment.resolved.total", { amount: "$5.00" })
+    )
+    await expect(
+      card
+        .getByTestId("overpayment-answer")
+        .filter({ hasText: translate("en", "overpayment.breakdown.withdrawn") })
+        .getByText("$2.00", { exact: true })
+    ).toHaveCSS("text-decoration-line", "line-through")
+  })
+
+  await test.step("Resolved bill in the history", async () => {
+    await expect(
+      card
+        .getByTestId("overpayment-answer")
+        .filter({ hasText: translate("en", "overpayment.breakdown.return") })
+    ).toContainText(/4[.,]00/u)
+    await gotoPage(page, "/activity/bills", "en", "activity.title")
+    await expect(billRow(page, billId)).not.toContainText(
+      translate("en", "billHistory.overpaid")
+    )
+  })
+})
+
+test("returning an overpayment skips a payment that was refunded in full", async ({
+  seededPage: page,
+}) => {
+  await addCatalogItem(page, "en", { name: "Coffee", price: "5" })
+  const billId = await startBillAndBeginCashPayment(page, "en")
+  await createAndPaySecondPayment(page, billId)
+  await markCashPaidAndSettle(page, "en")
+  await page
+    .getByTestId("payment-paid-panel")
+    .getByRole("button", { name: translate("en", "paymentWait.detail") })
+    .click()
+  await page
+    .getByRole("heading", { name: translate("en", "paymentDetail.title") })
+    .waitFor()
+  const firstPaymentPath = new URL(page.url()).pathname
+
+  await test.step("one of the two payments is refunded in full as goods", async () => {
+    await gotoPage(page, firstPaymentPath, "en", "paymentDetail.title")
+    const dialog = await openRefundDialog(page, "en")
+    await dialog
+      .getByRole("button", {
+        name: translate("en", "refund.dialog.purpose.goods"),
+      })
+      .click()
+    await dialog
+      .getByLabel(translate("en", "refund.dialog.amount.label"))
+      .fill("5")
+    await confirmRefund(dialog, "en")
+  })
+
+  await test.step("the return goes straight to the payment that holds the 5.00", async () => {
+    await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+    await expect(overpaymentCard(page)).toContainText(/5[.,]00/u)
+    const dialog = await openOverpaymentReturn(page, "en")
+    await expect(
+      dialog.getByLabel(translate("en", "refund.dialog.amount.label"))
+    ).toHaveValue(/^5([.,]00)?$/u)
+  })
+})
+
+test("two payments of the same share are told apart by number, method and what can be resolved from each", async ({
+  seededPage: page,
+}) => {
+  await addCatalogItem(page, "en", { name: "Coffee", price: "5" })
+  const billId = await startBillAndBeginCashPayment(page, "en")
+  await createAndPaySecondPayment(page, billId)
+  await markCashPaidAndSettle(page, "en")
+  await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+  const optionOf = (number: number) =>
+    translateParams("en", "overpayment.dialog.paymentOption", {
+      number,
+      method: translate("en", "paymentDetail.paymentMethod.cash"),
+      amount: "$5.00",
+    })
+
+  await test.step("the bill's payment rows show each payment's number", async () => {
+    for (const number of [1, 2]) {
+      await expect(
+        page.getByRole("link").filter({
+          hasText: translateParams("en", "billDetail.payments.numberedAmount", {
+            number,
+            amount: "$5.00",
+          }),
+        })
+      ).toBeVisible()
+    }
+  })
+
+  await test.step("Return it names both payments", async () => {
+    const dialog = await openOverpaymentReturn(page, "en")
+    for (const number of [1, 2]) {
+      await expect(
+        dialog.getByRole("button", { name: optionOf(number), exact: true })
+      ).toBeVisible()
+    }
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+  })
+
+  await test.step("Keep it names both payments", async () => {
+    await overpaymentCard(page)
+      .getByRole("button", { name: translate("en", "overpayment.action.keep") })
+      .click()
+    const dialog = page.getByRole("dialog")
+    for (const number of [1, 2]) {
+      await expect(
+        dialog.getByRole("button", { name: optionOf(number), exact: true })
+      ).toBeVisible()
+    }
+  })
+})
+
+test("It's a tip and Keep it each say what they mean, in full on a 320 px phone in Czech", async ({
+  seededPage: page,
+}) => {
+  const billId = await startOverpaidBill(page)
+  await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+
+  await test.step("It's a tip says the guest left it on purpose", async () => {
+    const dialog = await openOverpaymentResolution(page, "en", "tip")
+    await expect(dialog).toContainText(
+      translate("en", "overpayment.dialog.tip.consequence")
+    )
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+  })
+
+  await test.step("Keep it says the money stays with the business", async () => {
+    const dialog = await openOverpaymentResolution(page, "en", "kept")
+    await expect(dialog).toContainText(
+      translate("en", "overpayment.dialog.keep.consequence")
+    )
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+  })
+
+  await test.step("in Czech at 320 px both lines read in full", async () => {
+    await switchToCzech(page)
+    await page.setViewportSize({ width: 320, height: 640 })
+    await gotoPage(page, `/activity/bills/${billId}`, "cs", "billDetail.title")
+    for (const kind of ["tip", "kept"] as const) {
+      const dialog = await openOverpaymentResolution(page, "cs", kind)
+      const consequence = dialog.getByText(
+        translate(
+          "cs",
+          kind === "tip"
+            ? "overpayment.dialog.tip.consequence"
+            : "overpayment.dialog.keep.consequence"
+        )
+      )
+      await expect(consequence).toBeVisible()
+      expect(await isClipped(consequence)).toBe(false)
+      await page.keyboard.press("Escape")
+      await expect(dialog).toBeHidden()
+    }
+  })
+})
+
+test("an unresolved overpayment is shown above the bill's lines", async ({
+  seededPage: page,
+}) => {
+  await addCatalogItem(page, "en", { name: "Coffee", price: "5" })
+  const billId = await startBillAndBeginCashPayment(page, "en")
+  await prepareIbanPayment(page, "en")
+  await page
+    .getByRole("tab", { name: translate("en", "paymentWait.method.cash") })
+    .click()
+  await markCashPaid(page, "en")
+  await simulateDuplicateSettlement(page)
+  await waitForLocalWriteToSettle(page)
+  await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+  const card = overpaymentCard(page)
+  await expect(card).toContainText(overpaidByPattern("en"))
+
+  const cardBox = await card.boundingBox()
+  const firstLineBox = await page
+    .getByText("Coffee", { exact: true })
+    .boundingBox()
+  expect(cardBox).not.toBeNull()
+  expect(firstLineBox).not.toBeNull()
+  expect((cardBox?.y ?? 0) + (cardBox?.height ?? 0)).toBeLessThanOrEqual(
+    firstLineBox?.y ?? 0
+  )
+})
+
+test("resolving an overpayment fits a 320 px phone in Czech and marks the picked choice in dark mode", async ({
+  seededPage: page,
+}) => {
+  const billId = await startOverpaidBill(page)
+  await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+  await resolveOverpayment(page, "en", { kind: "kept", amount: "1" })
+  await switchToCzech(page)
+  await page.setViewportSize({ width: 320, height: 640 })
+  await gotoPage(page, `/activity/bills/${billId}`, "cs", "billDetail.title")
+  const card = overpaymentCard(page)
+
+  await test.step("Return, tip, keep and withdraw read in full and are at least 44 px tall", async () => {
+    for (const key of [
+      "overpayment.action.return",
+      "overpayment.action.tip",
+      "overpayment.action.keep",
+      "overpayment.withdraw",
+    ] as const) {
+      await expectReadableTarget(
+        card.getByRole("button", { name: translate("cs", key), exact: true })
+      )
+    }
+  })
+
+  const dialog = await openOverpaymentReturn(page, "cs")
+  const choice = (
+    key:
+      | "refund.dialog.purpose.overpayment"
+      | "refund.dialog.purpose.goods"
+      | "refund.dialog.method.cashRegister"
+      | "refund.dialog.method.outside"
+  ) => dialog.getByRole("button", { name: translate("cs", key) })
+
+  await test.step("the purpose and method choices read in full and are at least 44 px tall", async () => {
+    for (const key of [
+      "refund.dialog.purpose.overpayment",
+      "refund.dialog.purpose.goods",
+      "refund.dialog.method.cashRegister",
+      "refund.dialog.method.outside",
+    ] as const) {
+      await expectReadableTarget(choice(key))
+    }
+  })
+
+  await test.step("in dark mode the picked method is marked at 3:1 against the other", async () => {
+    await page.emulateMedia({ colorScheme: "dark" })
+    await expect(page.locator("html")).toHaveClass(/dark/u)
+    const outside = choice("refund.dialog.method.outside")
+    const register = choice("refund.dialog.method.cashRegister")
+    await outside.click()
+    await expect(outside).toHaveAttribute("aria-pressed", "true")
+    await expect(outside.locator("svg")).toBeVisible()
+    await expect(register.locator("svg")).toBeHidden()
+    await expect(register).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+    expect(await pickContrast(outside, register)).toBeGreaterThanOrEqual(3)
+  })
+})
+
+test("the amount to keep is checked when the field is left, and the error is read with the field", async ({
+  seededPage: page,
+}) => {
+  const billId = await startOverpaidBill(page)
+  await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+  await resolveOverpayment(page, "en", { kind: "kept", amount: "2" })
+  await expect(overpaymentCard(page)).toContainText(/3[.,]00/u)
+  const dialog = await openOverpaymentResolution(page, "en", "kept")
+  const amount = dialog.getByLabel(translate("en", "overpayment.dialog.amount"))
+  const tooMuch = translateParams("en", "overpayment.dialog.amount.aboveKeep", {
+    amount: "$3.00",
+  })
+
+  await test.step("9.00 is reported only once the field is left", async () => {
+    await amount.fill("9.00")
+    await expect(dialog.getByText(tooMuch)).toBeHidden()
+    await expect(amount).toHaveAttribute("aria-invalid", "false")
+    await amount.blur()
+    await expect(dialog.getByText(tooMuch)).toBeVisible()
+    await expect(amount).toHaveAttribute("aria-invalid", "true")
+    await expect(amount).toHaveAccessibleDescription(tooMuch)
+  })
+
+  await test.step("an empty amount leaves the amount out of the button", async () => {
+    await amount.fill("")
+    await expect(
+      dialog.getByRole("button", {
+        name: translate("en", "overpayment.dialog.confirmEmpty.keep"),
+        exact: true,
+      })
+    ).toBeDisabled()
+  })
+})
+
+test("a goodwill refund on an overpaid bill leaves the overpayment for the tip", async ({
+  seededPage: page,
+}) => {
+  await addCatalogItem(page, "en", { name: "Coffee", price: "5" })
+  const billId = await startBillAndBeginCashPayment(page, "en")
+  await prepareIbanPayment(page, "en")
+  await page
+    .getByRole("tab", { name: translate("en", "paymentWait.method.cash") })
+    .click()
+  await markCashPaid(page, "en")
+  await simulateDuplicateSettlement(page)
+  let paymentPath = ""
+
+  await test.step("Goodwill refund on an overpaid bill", async () => {
+    await page
+      .getByTestId("payment-paid-panel")
+      .getByRole("button", { name: translate("en", "paymentWait.detail") })
+      .click()
+    await page
+      .getByRole("heading", { name: translate("en", "paymentDetail.title") })
+      .waitFor()
+    paymentPath = new URL(page.url()).pathname
+    const dialog = await openRefundDialog(page, "en")
+    await dialog
+      .getByRole("button", {
+        name: translate("en", "refund.dialog.purpose.goods"),
+      })
+      .click()
+    await dialog
+      .getByLabel(translate("en", "refund.dialog.amount.label"))
+      .fill("1")
+    await confirmRefund(dialog, "en")
+  })
+
+  await test.step("the whole overpayment is still there for the tip", async () => {
+    await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+    await expect(overpaymentCard(page)).toContainText(/5[.,]00/u)
+    await resolveOverpayment(page, "en", { kind: "tip", amount: "5" })
+    await expect(overpaymentCard(page)).toContainText(
+      translate("en", "overpayment.resolved.title")
+    )
+  })
+
+  await test.step("Tip confirmed", async () => {
+    await gotoPage(page, paymentPath, "en", "paymentDetail.title")
+    await expect(
+      page.getByText(
+        translateParams("en", "paymentDetail.overpaymentTip", {
+          amount: "$5.00",
+        })
+      )
+    ).toBeVisible()
   })
 })

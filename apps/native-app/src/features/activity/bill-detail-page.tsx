@@ -8,6 +8,7 @@ import { formatMoney } from "@payky/app-shared/format-money"
 import { useNow } from "@payky/app-shared/use-now"
 import { billByIdQuery } from "@payky/core/modules/bill/bill-queries"
 import { BillId } from "@payky/core/modules/bill/bill-types"
+import { deriveBillOverpayment } from "@payky/core/modules/bill/bill-utils"
 import {
   calculateTaxRecap,
   hasTaxableLines,
@@ -57,6 +58,7 @@ import {
   useBillLineSummaries,
   useBillStatus,
 } from "../shared/use-bill-state.ts"
+import { useOverpaymentInput } from "../shared/use-overpayment-input.ts"
 import { PaymentMethodIcons } from "./activity-parts.tsx"
 import { BillStatusBadge } from "./bill-status-display.tsx"
 import {
@@ -66,6 +68,7 @@ import {
   OptionalRow,
   Technical,
 } from "./detail-parts.tsx"
+import { OverpaymentCard } from "./overpayment-card.tsx"
 import { PaymentDetailSkeleton } from "./payment-detail-page.tsx"
 import {
   PaymentStatusBadge,
@@ -82,14 +85,17 @@ type BillPaymentRow = InferRow<
 /** `/activity/bills/[billId]`: one bill, read-only. */
 export function BillDetailPage() {
   const { t } = useTranslation()
-  const { billId } = useLocalSearchParams<{ billId: string }>()
+  const { billId, afterEdit } = useLocalSearchParams<{
+    billId: string
+    afterEdit?: string
+  }>()
   const parsed = BillId.safeParse(billId)
 
   return (
     <DetailScreen title={t("billDetail.title")}>
       {parsed.success ? (
         <Suspense fallback={<PaymentDetailSkeleton />}>
-          <BillDetail billId={parsed.data} />
+          <BillDetail billId={parsed.data} afterEdit={afterEdit === "1"} />
         </Suspense>
       ) : (
         <NotFoundCard messageKey="billDetail.invalidId" />
@@ -98,7 +104,13 @@ export function BillDetailPage() {
   )
 }
 
-function BillDetail({ billId }: { readonly billId: BillId }) {
+function BillDetail({
+  billId,
+  afterEdit,
+}: {
+  readonly billId: BillId
+  readonly afterEdit: boolean
+}) {
   const { t } = useTranslation()
   const locale = useLocale()
   const [bill] = useEvoluQuery(billByIdQuery(billId)).data
@@ -114,14 +126,37 @@ function BillDetail({ billId }: { readonly billId: BillId }) {
   const selfPayAllocated = sumSelfPayAllocationsByLineKey(
     useEvoluQuery(selfPayAllocationsByBillIdQuery(billId)).data
   )
+  const overpaymentInput = useOverpaymentInput({ billId })
 
   // A deleted or never-synced id: the same page, not an error.
   if (bill === undefined || billStatus === undefined)
     return <NotFoundCard messageKey="billDetail.notFound" />
 
   const table = tables.find((candidate) => candidate.id === bill.tableId)
+  const billLabel =
+    bill.label ?? t("bill.list.label", { number: bill.displayNumber })
   const totalAmount = deriveBillSummaryTotal(summaries)
   const taxRecapRows = calculateTaxRecap(summaries, taxRates)
+  const isOverpaymentUnresolved =
+    overpaymentInput !== undefined &&
+    deriveBillOverpayment(overpaymentInput).unresolved > 0
+  const overpaymentCard = (
+    <OverpaymentCard
+      scope={{ billId }}
+      billLabel={billLabel}
+      currency={bill.currency}
+      onDecideLater={afterEdit ? () => router.back() : undefined}
+      payments={payments.map((payment) => ({
+        id: payment.id,
+        number: payment.serialNumber,
+        amount: payment.amount,
+        methods: payment.claimedTransactions.map(({ kind }) => kind),
+        createdAt: payment.createdAt,
+        canceledAt: payment.canceledAt,
+        confirmedPaidAt: payment.confirmedPaidAt,
+      }))}
+    />
+  )
   const closedOrCanceled =
     billStatus.status === "closed" && bill.closedAt !== null
       ? t("billDetail.closedAtValue", {
@@ -145,9 +180,7 @@ function BillDetail({ billId }: { readonly billId: BillId }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {bill.label ?? t("bill.list.label", { number: bill.displayNumber })}
-          </CardTitle>
+          <CardTitle>{billLabel}</CardTitle>
           <CardDescription>
             {formatDateTime(new Date(bill.createdAt), locale)}
           </CardDescription>
@@ -181,6 +214,8 @@ function BillDetail({ billId }: { readonly billId: BillId }) {
               </Text>
             )}
           </YStack>
+
+          {isOverpaymentUnresolved ? overpaymentCard : null}
 
           {/* Spelled out rather than "—": a counter sale with no table is a fact; "—" is a table row that is gone. */}
           <DetailRow label={t("billDetail.table")}>
@@ -218,17 +253,19 @@ function BillDetail({ billId }: { readonly billId: BillId }) {
               <TaxRecap rows={taxRecapRows} currency={bill.currency} />
             </>
           ) : null}
-          {coverage === "paid" ? null : (
+          {coverage === "underpaid" ? (
             <>
               <Separator />
               <BillCoverageWarning
-                coverage={coverage}
+                coverage={{ type: "underpaid" }}
                 expectedAmount={totalAmount}
                 claimedSum={claimedSum}
                 currency={bill.currency}
               />
             </>
-          )}
+          ) : null}
+
+          {isOverpaymentUnresolved ? null : overpaymentCard}
         </CardContent>
       </Card>
 
@@ -309,11 +346,18 @@ function BillPaymentRowView({
     { value: payment.amount, currency: payment.currency },
     locale
   )
+  const title =
+    payment.serialNumber === null
+      ? amount
+      : t("billDetail.payments.numberedAmount", {
+          number: payment.serialNumber,
+          amount,
+        })
 
   return (
     <Pressable
       role="button"
-      aria-label={`${amount}, ${t(paymentStatusLabelKey[status])}`}
+      aria-label={`${title}, ${t(paymentStatusLabelKey[status])}`}
       onPress={() =>
         router.push({
           pathname: "/activity/[paymentId]",
@@ -332,7 +376,7 @@ function BillPaymentRowView({
             lineHeight={fontSize.sm}
             fontWeight={fontWeight.medium}
           >
-            {amount}
+            {title}
           </Text>
           <XStack items="center" gap={8}>
             <Text

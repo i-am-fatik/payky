@@ -92,7 +92,13 @@ export function PaymentDetailPage({
   )
 }
 
-export function BillDetailPage({ billId }: { readonly billId: string }) {
+export function BillDetailPage({
+  billId,
+  afterEdit,
+}: {
+  readonly billId: string
+  readonly afterEdit?: boolean
+}) {
   const { t } = useTranslation()
 
   return (
@@ -101,7 +107,7 @@ export function BillDetailPage({ billId }: { readonly billId: string }) {
 
       <section className="pt-16">
         <Suspense fallback={<PaymentDetailSkeleton />}>
-          <BillDetail billId={billId} />
+          <BillDetail billId={billId} afterEdit={afterEdit} />
         </Suspense>
       </section>
     </>

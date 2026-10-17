@@ -29,4 +29,16 @@ export type OverpaymentScope = RequireExactlyOne<{
   readonly paymentId: PaymentId
 }>
 
+export interface OverpaymentScopes {
+  readonly billIds: ReadonlyArray<BillId>
+  readonly paymentIds: ReadonlyArray<PaymentId>
+}
+
+export const overpaymentScopesOf = (
+  scope: OverpaymentScope
+): OverpaymentScopes =>
+  scope.billId === undefined
+    ? { billIds: [], paymentIds: [scope.paymentId] }
+    : { billIds: [scope.billId], paymentIds: [] }
+
 export type BillStatus = "open" | "closed" | "canceled"

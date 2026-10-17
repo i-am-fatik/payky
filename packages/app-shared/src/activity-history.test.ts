@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 import {
   type BillHistoryRow,
   billHistoryIssueLabels,
+  deriveOverpaymentEntry,
   derivePaymentHistoryRowState,
   formatActivityDayTitle,
   hasAnyIssue,
@@ -47,11 +48,14 @@ const claim = (paymentId: string, amount: number, id = "tx1") => ({
 
 describe("derivePaymentHistoryRowState", () => {
   test("a claimed payment is paid, an unclaimed one pending", () => {
-    expect(derivePaymentHistoryRowState(payment(), now).status).toBe("pending")
+    expect(derivePaymentHistoryRowState(payment(), now, false).status).toBe(
+      "pending"
+    )
     expect(
       derivePaymentHistoryRowState(
         payment({ ownClaimedTransactions: [claim("p1", 100)] }),
-        now
+        now,
+        false
       ).status
     ).toBe("paid")
   })
@@ -60,18 +64,21 @@ describe("derivePaymentHistoryRowState", () => {
     expect(
       derivePaymentHistoryRowState(
         payment({ expiresAt: now.getTime() - 1 }),
-        now
+        now,
+        false
       ).isVoid
     ).toBe(true)
     expect(
-      derivePaymentHistoryRowState(payment({ canceledAt: 1 }), now).isVoid
+      derivePaymentHistoryRowState(payment({ canceledAt: 1 }), now, false)
+        .isVoid
     ).toBe(true)
   })
 
   test("a canceled payment whose money arrived is a collision, not void", () => {
     const state = derivePaymentHistoryRowState(
       payment({ canceledAt: 1, ownClaimedTransactions: [claim("p1", 100)] }),
-      now
+      now,
+      false
     )
     expect(state.status).toBe("canceled")
     expect(state.hasCancellationCollision).toBe(true)
@@ -81,7 +88,9 @@ describe("derivePaymentHistoryRowState", () => {
 
   test("a bill-less payment raises no coverage issue", () => {
     expect(
-      hasAnyIssue(derivePaymentHistoryRowState(payment(), now).issueFlags)
+      hasAnyIssue(
+        derivePaymentHistoryRowState(payment(), now, false).issueFlags
+      )
     ).toBe(false)
   })
 
@@ -92,21 +101,94 @@ describe("derivePaymentHistoryRowState", () => {
         billLines: [],
         billClaimedTransactions: [],
       }),
-      now
+      now,
+      false
     ).issueFlags
     expect(flags.billUnderpaid).toBe(false)
     expect(flags.billOverpaid).toBe(false)
   })
 
-  test("a bill claimed beyond its (empty) total is overpaid", () => {
-    const flags = derivePaymentHistoryRowState(
-      payment({
-        billId: "b1",
-        billClaimedTransactions: [claim("other", 50)],
-      }),
-      now
+  test("an unresolved overpayment flags the bill, or the payment without one", () => {
+    const withBill = derivePaymentHistoryRowState(
+      payment({ billId: "b1", billClaimedTransactions: [claim("other", 50)] }),
+      now,
+      true
     ).issueFlags
-    expect(flags.billOverpaid).toBe(true)
+    expect(withBill.billOverpaid).toBe(true)
+    expect(withBill.hasExcessSettlement).toBe(false)
+
+    const withoutBill = derivePaymentHistoryRowState(
+      payment(),
+      now,
+      true
+    ).issueFlags
+    expect(withoutBill.hasExcessSettlement).toBe(true)
+    expect(withoutBill.billOverpaid).toBe(false)
+  })
+
+  test("a resolved overpayment flags nothing", () => {
+    const flags = derivePaymentHistoryRowState(
+      payment({ billId: "b1", billClaimedTransactions: [claim("other", 50)] }),
+      now,
+      false
+    ).issueFlags
+    expect(flags.billOverpaid).toBe(false)
+    expect(flags.hasExcessSettlement).toBe(false)
+  })
+})
+
+describe("deriveOverpaymentEntry", () => {
+  test("a payment without a bill is an entry once its claims exceed its amount", () => {
+    expect(
+      deriveOverpaymentEntry(
+        payment({ ownClaimedTransactions: [claim("p1", 100)] })
+      )
+    ).toBeNull()
+    expect(
+      deriveOverpaymentEntry(
+        payment({
+          ownClaimedTransactions: [
+            claim("p1", 100, "a"),
+            claim("p1", 100, "b"),
+          ],
+        })
+      )
+    ).toEqual({ paymentId: "p1" })
+  })
+
+  test("a payment of an overpaid bill is an entry for the bill", () => {
+    expect(
+      deriveOverpaymentEntry(
+        payment({
+          billId: "b1",
+          billCanceledAt: null,
+          billConfirmedClosedAt: null,
+          billClaimedTransactions: [claim("p1", 100)],
+        })
+      )
+    ).toEqual({ billId: "b1", billTotal: 0, isCanceled: false })
+  })
+
+  test("a canceled bill is marked so, unless it was confirmed closed", () => {
+    const entryOf = (billConfirmedClosedAt: number | null) =>
+      deriveOverpaymentEntry(
+        payment({
+          billId: "b1",
+          billCanceledAt: 1,
+          billConfirmedClosedAt,
+          billClaimedTransactions: [claim("p1", 100)],
+        })
+      )
+    expect(entryOf(null)).toMatchObject({ isCanceled: true })
+    expect(entryOf(2)).toMatchObject({ isCanceled: false })
+  })
+
+  test("a bill that is paid or underpaid is no entry", () => {
+    expect(
+      deriveOverpaymentEntry(
+        payment({ billId: "b1", billClaimedTransactions: [] })
+      )
+    ).toBeNull()
   })
 })
 
@@ -209,7 +291,7 @@ describe("bill history rows", () => {
   test("an untouched open bill is open and raises no issue", () => {
     const summary = summarizeBillHistoryRow(bill())
     expect(summary.status).toBe("open")
-    expect(billHistoryIssueLabels(summary, t)).toEqual([])
+    expect(billHistoryIssueLabels(summary, t, false)).toEqual([])
   })
 
   test("a canceled bill whose money arrived is flagged, not silently canceled", () => {
@@ -218,8 +300,21 @@ describe("bill history rows", () => {
     )
     expect(summary.status).toBe("canceled")
     expect(summary.hasCancellationCollision).toBe(true)
-    expect(billHistoryIssueLabels(summary, t)).toContain(
+    expect(billHistoryIssueLabels(summary, t, false)).toContain(
       t("bill.collision.title")
+    )
+  })
+
+  test("an overpaid bill is flagged only while some of it is unresolved", () => {
+    const summary = summarizeBillHistoryRow(
+      bill({ claimedTransactions: [claim("p1", 100)] })
+    )
+    expect(summary.coverage).toBe("overpaid")
+    expect(billHistoryIssueLabels(summary, t, true)).toContain(
+      t("billHistory.overpaid")
+    )
+    expect(billHistoryIssueLabels(summary, t, false)).not.toContain(
+      t("billHistory.overpaid")
     )
   })
 

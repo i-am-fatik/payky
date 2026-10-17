@@ -13,7 +13,6 @@ import {
 import type { latestPaymentsQuery } from "@payky/core/modules/payment/payment-queries"
 import {
   derivePaymentHasCancellationCollision,
-  derivePaymentHasExcessSettlement,
   derivePaymentStatus,
 } from "@payky/core/modules/payment/payment-status-utils"
 import type { PaymentStatus } from "@payky/core/modules/payment/payment-types"
@@ -28,6 +27,7 @@ import { refundStateLabelKey } from "./activity-labels.ts"
 import { formatRelativeDate } from "./format-date.ts"
 import { formatMoney } from "./format-money.ts"
 import type { createTranslate } from "./i18n/translate.ts"
+import type { OverpaymentEntry } from "./overpayment-input.ts"
 
 /**
  * What the Activity lists derive per row, for both apps. The query rows carry
@@ -99,23 +99,17 @@ export interface PaymentHistoryRowState {
 
 /**
  * Every issue a payment's row should flag — the canceled+claimed collision,
- * this payment's own duplicate-settlement collision, and/or its bill's
- * coverage being off (see docs/bill-payment-states.md's "Bill payment
- * coverage" section). `billUnderpaid` is only flagged once a partial payment
- * has actually landed on the bill (`billClaimedSum > 0`) — an ordinary open
- * bill with nothing paid yet is also "underpaid" by definition, so flagging
- * it would put the warning on every pending bill payment row. `billOverpaid`
- * needs no such gate: an unpaid bill is never overpaid.
- *
- * `billOverpaid` is deliberately suppressed when it's fully explained by this
- * same payment's own excess settlement (this is the only claimed payment on
- * the bill) — "Paid more than once" already says that. It still shows when
- * *another* payment is also claimed against the bill, a genuinely different
- * cause.
+ * money above the payment or its bill, and its bill being underpaid (see
+ * docs/bill-payment-states.md's "Bill payment coverage" section).
+ * `billUnderpaid` is only flagged once a partial payment has actually landed
+ * on the bill (`billClaimedSum > 0`) — an ordinary open bill with nothing
+ * paid yet is also "underpaid" by definition, so flagging it would put the
+ * warning on every pending bill payment row.
  */
 const resolvePaymentHistoryIssueFlags = (
   item: PaymentHistoryRow,
-  hasCancellationCollision: boolean
+  hasCancellationCollision: boolean,
+  hasUnresolvedOverpayment: boolean
 ): PaymentHistoryIssueFlags => {
   const billSummaries = calculateBillLineSummaries(
     item.billLines,
@@ -125,24 +119,12 @@ const resolvePaymentHistoryIssueFlags = (
   const billClaimedSum = calculateClaimedSum(item.billClaimedTransactions)
   const coverage = deriveBillCoverage(billTotal, billClaimedSum)
 
-  const hasExcessSettlement = derivePaymentHasExcessSettlement({
-    amount: item.amount,
-    excessAcknowledgedAt: item.excessAcknowledgedAt,
-    claimedSum: sumDistinctClaimedAmounts(item.ownClaimedTransactions),
-  })
-  const hasOtherClaimedPayment = item.billClaimedTransactions.some(
-    (transaction) => transaction.paymentId !== item.id
-  )
-
   return {
     hasCancellationCollision,
-    hasExcessSettlement,
+    hasExcessSettlement: item.billId === null && hasUnresolvedOverpayment,
     billUnderpaid:
       item.billId !== null && coverage === "underpaid" && billClaimedSum > 0,
-    billOverpaid:
-      item.billId !== null &&
-      coverage === "overpaid" &&
-      (!hasExcessSettlement || hasOtherClaimedPayment),
+    billOverpaid: item.billId !== null && hasUnresolvedOverpayment,
   }
 }
 
@@ -154,7 +136,8 @@ const resolvePaymentHistoryIssueFlags = (
  */
 export const derivePaymentHistoryRowState = (
   item: PaymentHistoryRow,
-  now: Date
+  now: Date,
+  hasUnresolvedOverpayment: boolean
 ): PaymentHistoryRowState => {
   const hasActiveClaim = item.ownClaimedTransactions.length > 0
   const status = derivePaymentStatus({
@@ -173,11 +156,39 @@ export const derivePaymentHistoryRowState = (
   return {
     status,
     hasCancellationCollision,
-    issueFlags: resolvePaymentHistoryIssueFlags(item, hasCancellationCollision),
+    issueFlags: resolvePaymentHistoryIssueFlags(
+      item,
+      hasCancellationCollision,
+      hasUnresolvedOverpayment
+    ),
     isVoid:
       (status === "canceled" || status === "expired") &&
       !hasCancellationCollision,
   }
+}
+
+export const deriveOverpaymentEntry = (
+  item: PaymentHistoryRow
+): OverpaymentEntry | null => {
+  if (item.billId === null) {
+    return sumDistinctClaimedAmounts(item.ownClaimedTransactions) > item.amount
+      ? { paymentId: item.id }
+      : null
+  }
+  const billTotal = deriveBillSummaryTotal(
+    calculateBillLineSummaries(item.billLines, item.billItems)
+  )
+  return deriveBillCoverage(
+    billTotal,
+    calculateClaimedSum(item.billClaimedTransactions)
+  ) === "overpaid"
+    ? {
+        billId: item.billId,
+        billTotal,
+        isCanceled:
+          item.billCanceledAt !== null && item.billConfirmedClosedAt === null,
+      }
+    : null
 }
 
 export const hasAnyIssue = (flags: PaymentHistoryIssueFlags): boolean =>
@@ -255,20 +266,22 @@ export const summarizeBillHistoryRow = (
 
 /**
  * Everything this bill row should flag — the canceled+funded collision (see
- * docs/bill-payment-states.md), and coverage being off. Overpaid is always
- * worth flagging; underpaid is only flagged once a partial payment has
- * actually landed (`claimedSum > 0`) — an ordinary open cart with nothing
- * paid yet is also "underpaid" by definition, and flagging every one of
- * those would drown out the genuine signal (see the "reading the
- * combination" table in docs/bill-payment-states.md).
+ * docs/bill-payment-states.md), and coverage being off. Underpaid is only
+ * flagged once a partial payment has actually landed (`claimedSum > 0`) —
+ * an ordinary open cart with nothing paid yet is also "underpaid" by
+ * definition, and flagging every one of those would drown out the genuine
+ * signal (see the "reading the combination" table in
+ * docs/bill-payment-states.md). Overpaid is flagged while money above the
+ * bill is unresolved.
  */
 export const billHistoryIssueLabels = (
   summary: BillHistoryItemSummary,
-  t: Translate
+  t: Translate,
+  hasUnresolvedOverpayment: boolean
 ): ReadonlyArray<string> =>
   [
     summary.hasCancellationCollision ? t("bill.collision.title") : null,
-    summary.coverage === "overpaid" ? t("billHistory.overpaid") : null,
+    hasUnresolvedOverpayment ? t("billHistory.overpaid") : null,
     summary.coverage === "underpaid" && summary.claimedSum > 0
       ? t("billHistory.underpaid")
       : null,

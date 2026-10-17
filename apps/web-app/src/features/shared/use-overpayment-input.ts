@@ -1,10 +1,13 @@
 import type { Id } from "@evolu/common"
+import {
+  type OverpaymentEntry,
+  toOverpaymentInputs,
+} from "@payky/app-shared/overpayment-input"
 import type { AppSchema } from "@payky/core/evolu/schema"
 import {
   overpaymentPaymentsQuery,
   overpaymentTransactionsQuery,
 } from "@payky/core/modules/bill/bill-coverage-queries"
-import { toBillOverpaymentInput } from "@payky/core/modules/bill/bill-overpayment-utils"
 import type { OverpaymentScope } from "@payky/core/modules/bill/bill-types"
 import type { BillOverpaymentInput } from "@payky/core/modules/bill/bill-utils"
 import { deriveBillSummaryTotal } from "@payky/core/modules/bill-line/bill-line-utils"
@@ -14,17 +17,13 @@ import {
   mapWriteClocks,
   writeClocksQuery,
 } from "@payky/core/modules/shared/evolu-history-queries"
-import { NonNegativeInteger } from "@payky/core/modules/shared/schema"
 import { useMemo } from "react"
 import { useBillLineSummaries } from "@/features/shared/use-bill-line-summaries.ts"
 import { useBillStatus } from "@/features/shared/use-bill-status.ts"
 import { useEvolu } from "@/hooks/use-evolu.ts"
-import {
-  useEvoluQuery,
-  useOptionalEvoluQuery,
-} from "@/hooks/use-evolu-query.ts"
+import { useOptionalEvoluQuery } from "@/hooks/use-evolu-query.ts"
 
-const useFirstWriteClocks = <TId extends Id>(
+const useWriteClocks = <TId extends Id>(
   table: keyof typeof AppSchema,
   ids: ReadonlyArray<TId>,
   column?: string
@@ -44,84 +43,79 @@ const useFirstWriteClocks = <TId extends Id>(
   return useMemo(() => mapWriteClocks(ids, data), [ids, data])
 }
 
+export function useOverpaymentInputs(
+  entries: ReadonlyArray<OverpaymentEntry>
+): ReadonlyMap<string, BillOverpaymentInput> {
+  const billIds = entries.flatMap((entry) =>
+    "billId" in entry ? [entry.billId] : []
+  )
+  const paymentIds = entries.flatMap((entry) =>
+    "paymentId" in entry ? [entry.paymentId] : []
+  )
+  const scopes =
+    billIds.length + paymentIds.length === 0 ? null : { billIds, paymentIds }
+  const { data: payments } = useOptionalEvoluQuery(
+    scopes === null ? null : overpaymentPaymentsQuery(scopes)
+  )
+  const { data: transactions } = useOptionalEvoluQuery(
+    scopes === null ? null : overpaymentTransactionsQuery(scopes)
+  )
+  const { data: refunds } = useOptionalEvoluQuery(
+    scopes === null ? null : overpaymentRefundsQuery(scopes)
+  )
+  const { data: resolutions } = useOptionalEvoluQuery(
+    scopes === null ? null : overpaymentResolutionsQuery(scopes)
+  )
+  const clocks = {
+    claims: useWriteClocks(
+      "reconciliationClaim",
+      useMemo(() => transactions.map(({ claimId }) => claimId), [transactions])
+    ),
+    refunds: useWriteClocks(
+      "refund",
+      useMemo(() => refunds.map(({ id }) => id), [refunds])
+    ),
+    resolutions: useWriteClocks(
+      "overpaymentResolution",
+      useMemo(() => resolutions.map(({ id }) => id), [resolutions])
+    ),
+    acknowledgements: useWriteClocks(
+      "payment",
+      useMemo(
+        () =>
+          payments
+            .filter(({ excessAcknowledgedAt }) => excessAcknowledgedAt !== null)
+            .map(({ id }) => id),
+        [payments]
+      ),
+      "excessAcknowledgedAt"
+    ),
+  }
+
+  return toOverpaymentInputs(
+    entries,
+    { payments, transactions, refunds, resolutions },
+    clocks
+  )
+}
+
 export function useOverpaymentInput(
   scope: OverpaymentScope
 ): BillOverpaymentInput | undefined {
-  const { billId } = scope
-  const { data: payments } = useEvoluQuery(overpaymentPaymentsQuery(scope))
-  const { data: transactions } = useEvoluQuery(
-    overpaymentTransactionsQuery(scope)
-  )
-  const { data: refunds } = useEvoluQuery(overpaymentRefundsQuery(scope))
-  const { data: resolutions } = useEvoluQuery(
-    overpaymentResolutionsQuery(scope)
-  )
+  const { billId, paymentId } = scope
   const billStatus = useBillStatus(billId)
   const summaries = useBillLineSummaries(billId)
-
-  const claims = useFirstWriteClocks(
-    "reconciliationClaim",
-    useMemo(() => transactions.map(({ claimId }) => claimId), [transactions])
-  )
-  const refundClocks = useFirstWriteClocks(
-    "refund",
-    useMemo(() => refunds.map(({ id }) => id), [refunds])
-  )
-  const resolutionClocks = useFirstWriteClocks(
-    "overpaymentResolution",
-    useMemo(() => resolutions.map(({ id }) => id), [resolutions])
-  )
-  const acknowledgements = useFirstWriteClocks(
-    "payment",
-    useMemo(
-      () =>
-        payments
-          .filter(({ excessAcknowledgedAt }) => excessAcknowledgedAt !== null)
-          .map(({ id }) => id),
-      [payments]
-    ),
-    "excessAcknowledgedAt"
-  )
-
-  return useMemo(() => {
-    const payment = payments[0]
-    const total =
-      billId === undefined
-        ? payment === undefined
-          ? undefined
-          : {
-              billTotal: NonNegativeInteger(
-                Math.max(0, payment.amount - payment.tipAmount)
-              ),
-              isCanceled: false,
-            }
-        : billStatus === undefined
-          ? undefined
-          : {
+  const entries: ReadonlyArray<OverpaymentEntry> =
+    billId === undefined
+      ? [{ paymentId }]
+      : billStatus === undefined
+        ? []
+        : [
+            {
+              billId,
               billTotal: deriveBillSummaryTotal(summaries),
               isCanceled: billStatus.status === "canceled",
-            }
-    if (total === undefined) return undefined
-    return toBillOverpaymentInput(
-      { ...total, payments, transactions, refunds, resolutions },
-      {
-        claims,
-        refunds: refundClocks,
-        resolutions: resolutionClocks,
-        acknowledgements,
-      }
-    )
-  }, [
-    billId,
-    billStatus,
-    summaries,
-    payments,
-    transactions,
-    refunds,
-    resolutions,
-    claims,
-    refundClocks,
-    resolutionClocks,
-    acknowledgements,
-  ])
+            },
+          ]
+  return useOverpaymentInputs(entries).get(billId ?? paymentId)
 }

@@ -106,6 +106,7 @@ import { useBillInsertMode } from "@/features/bill/use-bill-insert-mode.ts"
 import { useBillScanHandler } from "@/features/bill/use-bill-scan-handler.tsx"
 import { useCartBill } from "@/features/bill/use-cart-bill.ts"
 import { useChangePulse } from "@/features/bill/use-change-pulse.ts"
+import { useCoveringEditQuestion } from "@/features/bill/use-covering-edit-question.ts"
 import { usePendingPayments } from "@/features/bill/use-pending-payments.ts"
 import { CategoryFilterBar } from "@/features/shared/category-filter-bar.tsx"
 import { useBillCancellationCollisionActions } from "@/features/shared/use-bill-cancellation-collision-actions.ts"
@@ -537,6 +538,7 @@ function BillCartView({
   const confirm = useConfirmDialog()
   const console = useConsole()
   const createTerminalPayment = useCreateTerminalPayment()
+  const coveringEdit = useCoveringEditQuestion(currency)
   const { data: settingsData } = useEvoluQuery(settingsQuery)
   const [settings] = settingsData
   const { data: catalogItems } = useEvoluQuery(catalogItemsQuery)
@@ -799,6 +801,21 @@ function BillCartView({
     splitPendingRef.current = true
     setSplitPending(true)
     try {
+      const outcome = await coveringEdit.ask(
+        billId,
+        input.items.map((item) => ({
+          billId,
+          deviceId: null,
+          catalogItemId: item.catalogItemId,
+          itemId: item.itemId,
+          type: item.type,
+          kind: "remove",
+          quantity: item.quantity,
+          totalAmount: item.totalAmount,
+        })),
+        "split"
+      )
+      if (outcome === null) return
       await using run = appRun()
 
       if (input.destination === "new") {

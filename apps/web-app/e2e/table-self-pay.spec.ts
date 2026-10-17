@@ -19,6 +19,7 @@ import {
   fakeSelfPayLightning,
   newGuestContext,
   openTableBill,
+  payAllOfTheBeer,
   pickEqualShares,
   pickLineUnits,
   pickShareChoice,
@@ -28,6 +29,7 @@ import {
   receiveShownBankTransfer,
   routeFakeNostrRelays,
   seedActiveFioPlugin,
+  seedPizzaAndBeerBill,
   shareLine,
 } from "./support/self-pay.ts"
 
@@ -38,33 +40,6 @@ const paidForRows = (guest: Page) =>
   guest
     .getByRole("region", { name: translate("en", "selfPay.paidFor.title") })
     .getByRole("listitem")
-
-const seedPizzaAndBeerBill = async (page: Page, table: string) => {
-  await seedActiveFioPlugin(page)
-  await addTable(page, "en", { name: table, seatCount: "4" })
-  await addCatalogItem(page, "en", { name: "Pizza", price: "101" })
-  await addCatalogItem(page, "en", { name: "Beer", price: "45" })
-  const guestAddress = await enableTableSelfPay(page, "en", table)
-  const billId = await openTableBill(page, "en", {
-    table,
-    items: ["Pizza", "Beer"],
-  })
-  return { guestAddress, billId }
-}
-
-const payAllOfTheBeer = async (page: Page, guest: Page) => {
-  await pickShareChoice(guest, "selfPay.choice.items")
-  await pickLineUnits(guest, { line: "Beer", units: 1 })
-  await guest
-    .getByRole("button", { name: guestText("selfPay.pay.total", "$45.00") })
-    .click()
-  await receiveShownBankTransfer(page, {
-    payer: guest,
-    language: "en",
-    amount: 4500,
-    currency: "USD",
-  })
-}
 
 const openPosBillSummary = async (page: Page, billId: string) => {
   await page.goto(`/bill?billId=${billId}`)
@@ -673,6 +648,13 @@ test("a table whose guest paid the beer reads partly paid, then free once staff 
       .getByRole("button", {
         name: nameParam("bill.brick.remove.aria", "Pizza"),
       })
+      .click()
+    const question = page.getByRole("alertdialog")
+    await expect(question).toContainText(
+      translate("en", "bill.cover.paid.title")
+    )
+    await question
+      .getByRole("button", { name: translate("en", "bill.cover.confirm") })
       .click()
     await waitForLocalWriteToSettle(page)
   })

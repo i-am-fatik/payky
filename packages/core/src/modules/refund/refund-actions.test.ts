@@ -939,7 +939,9 @@ describe("Staff can refund a paid payment", () => {
       amount: offer.amount,
     })
     await expect(
-      context.evolu.loadQuery(overpaymentRefundsQuery({ billId }))
+      context.evolu.loadQuery(
+        overpaymentRefundsQuery({ billIds: [billId], paymentIds: [] })
+      )
     ).resolves.toMatchObject([{ purpose: "goods", overpaymentAmount: 0 }])
   })
 })
@@ -957,7 +959,7 @@ describe("a refund records what it returns of the overpayment", () => {
       purpose: "overpayment",
     })
     const [refund] = await context.evolu.loadQuery(
-      overpaymentRefundsQuery({ billId })
+      overpaymentRefundsQuery({ billIds: [billId], paymentIds: [] })
     )
     const claimed = await context.evolu.loadQuery(
       activeClaimedTransactionsByPaymentIdQuery(paymentId)
