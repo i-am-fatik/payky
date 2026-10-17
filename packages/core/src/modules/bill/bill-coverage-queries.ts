@@ -3,7 +3,7 @@ import { sqliteTrue } from "@evolu/common"
 
 import { createQuery } from "../../evolu/schema.ts"
 import { quotedAmountSatsSql } from "../shared/claimed-amount.ts"
-import type { BillId, OverpaymentScope } from "./bill-types.ts"
+import type { BillId, OverpaymentScopes } from "./bill-types.ts"
 
 /**
  * Every payment for a bill that has an active reconciliation claim — money
@@ -45,8 +45,7 @@ export const claimedPaymentsByBillIdQuery = (billId: BillId) =>
  * payment). Unlike `claimedPaymentsByBillIdQuery`, this carries the real
  * transaction `amount` rather than the payment's nominal one, so it stays
  * correct when a payment ends up claimed for more (or, mid-split, less)
- * than its own amount — see `calculatePaymentClaimedSum`'s doc comment in
- * `payment-status-utils.ts`.
+ * than its own amount.
  *
  * `accountTransaction.amount` is in the transaction's own currency, which
  * for a Lightning/Spark settlement is satoshis against a fiat payment, so
@@ -132,7 +131,7 @@ export const paymentsByBillIdQuery = (billId: BillId) =>
       .where("payment.isDeleted", "is not", sqliteTrue)
   )
 
-export const overpaymentPaymentsQuery = (scope: OverpaymentScope) =>
+export const overpaymentPaymentsQuery = (scopes: OverpaymentScopes) =>
   createQuery((db) =>
     db
       .selectFrom("payment")
@@ -143,6 +142,7 @@ export const overpaymentPaymentsQuery = (scope: OverpaymentScope) =>
       )
       .select([
         "payment.id",
+        "payment.billId",
         "payment.amount",
         "payment.tipAmount",
         "payment.currency",
@@ -150,9 +150,14 @@ export const overpaymentPaymentsQuery = (scope: OverpaymentScope) =>
         "paymentCashRegister.receivedAmount as cashReceivedAmount",
       ])
       .where((eb) =>
-        scope.billId === undefined
-          ? eb("payment.id", "=", scope.paymentId)
-          : eb("payment.billId", "=", scope.billId)
+        eb.or([
+          ...(scopes.billIds.length === 0
+            ? []
+            : [eb("payment.billId", "in", scopes.billIds)]),
+          ...(scopes.paymentIds.length === 0
+            ? []
+            : [eb("payment.id", "in", scopes.paymentIds)]),
+        ])
       )
       .where("payment.isDeleted", "is not", sqliteTrue)
       .where("payment.amount", "is not", null)
@@ -165,7 +170,7 @@ export const overpaymentPaymentsQuery = (scope: OverpaymentScope) =>
       }>()
   )
 
-export const overpaymentTransactionsQuery = (scope: OverpaymentScope) =>
+export const overpaymentTransactionsQuery = (scopes: OverpaymentScopes) =>
   createQuery((db) =>
     db
       .selectFrom("payment")
@@ -187,6 +192,7 @@ export const overpaymentTransactionsQuery = (scope: OverpaymentScope) =>
       .select([
         "reconciliationClaim.id as claimId",
         "payment.id as paymentId",
+        "payment.billId as billId",
         "payment.amount as paymentAmount",
         "payment.currency as paymentCurrency",
         "paymentBtc.amountSats as paymentAmountSats",
@@ -195,9 +201,14 @@ export const overpaymentTransactionsQuery = (scope: OverpaymentScope) =>
         "accountTransaction.currency",
       ])
       .where((eb) =>
-        scope.billId === undefined
-          ? eb("payment.id", "=", scope.paymentId)
-          : eb("payment.billId", "=", scope.billId)
+        eb.or([
+          ...(scopes.billIds.length === 0
+            ? []
+            : [eb("payment.billId", "in", scopes.billIds)]),
+          ...(scopes.paymentIds.length === 0
+            ? []
+            : [eb("payment.id", "in", scopes.paymentIds)]),
+        ])
       )
       .where("payment.isDeleted", "is not", sqliteTrue)
       .where("payment.amount", "is not", null)

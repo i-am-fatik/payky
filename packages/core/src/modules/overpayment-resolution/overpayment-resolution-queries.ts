@@ -1,12 +1,13 @@
 import { type KyselyNotNull, sqliteTrue } from "@evolu/common"
 
 import { createQuery } from "../../evolu/schema.ts"
-import type { OverpaymentScope } from "../bill/bill-types.ts"
+import type { OverpaymentScopes } from "../bill/bill-types.ts"
 import type { OverpaymentResolutionId } from "./overpayment-resolution-types.ts"
 
 const overpaymentResolutionColumns = [
   "overpaymentResolution.id",
   "overpaymentResolution.paymentId",
+  "payment.billId as billId",
   "overpaymentResolution.deviceId",
   "overpaymentResolution.kind",
   "overpaymentResolution.amount",
@@ -24,16 +25,21 @@ type OverpaymentResolutionRequiredColumns = {
   knownTransactionIdsJson: KyselyNotNull
 }
 
-export const overpaymentResolutionsQuery = (scope: OverpaymentScope) =>
+export const overpaymentResolutionsQuery = (scopes: OverpaymentScopes) =>
   createQuery((db) =>
     db
       .selectFrom("overpaymentResolution")
       .innerJoin("payment", "payment.id", "overpaymentResolution.paymentId")
       .select(overpaymentResolutionColumns)
       .where((eb) =>
-        scope.billId === undefined
-          ? eb("payment.id", "=", scope.paymentId)
-          : eb("payment.billId", "=", scope.billId)
+        eb.or([
+          ...(scopes.billIds.length === 0
+            ? []
+            : [eb("payment.billId", "in", scopes.billIds)]),
+          ...(scopes.paymentIds.length === 0
+            ? []
+            : [eb("payment.id", "in", scopes.paymentIds)]),
+        ])
       )
       .where("payment.isDeleted", "is not", sqliteTrue)
       .where("overpaymentResolution.isDeleted", "is not", sqliteTrue)

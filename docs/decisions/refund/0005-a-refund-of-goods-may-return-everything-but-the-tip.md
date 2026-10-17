@@ -1,6 +1,6 @@
 # 0005 A refund of goods may return everything the payment received but its tip
 
-Status: accepted
+Status: superseded by refund/0007
 Date: 2026-10-01
 
 ## Context

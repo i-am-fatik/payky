@@ -1,11 +1,157 @@
 import { testCreateRun } from "@evolu/common"
 import { describe, expect, test } from "vitest"
-
+import { loadCalculatedBillLineSummaries } from "../bill-line/bill-line-actions.ts"
 import { recordOverpaymentResolution } from "../overpayment-resolution/overpayment-resolution-actions.ts"
-import { createOverpaymentContext } from "../overpayment-resolution/overpayment-resolution-test-fixtures.ts"
-import { acknowledgePaymentExcessSettlement } from "../payment/payment-actions.ts"
-import { PositiveInteger } from "../shared/schema.ts"
-import { loadOverpaymentInput } from "./bill-overpayment-guards.ts"
+import {
+  createOverpaymentContext,
+  type OverpaymentContext,
+} from "../overpayment-resolution/overpayment-resolution-test-fixtures.ts"
+import type { PaymentId } from "../payment/payment-types.ts"
+import { runMutationWithCompletion } from "../shared/evolu-utils.ts"
+import { PositiveInteger, TimestampMs } from "../shared/schema.ts"
+import {
+  loadBillEditOutcome,
+  loadOverpaymentInput,
+} from "./bill-overpayment-guards.ts"
+import type { BillId } from "./bill-types.ts"
+
+const acknowledgeAsAnOlderVersion = async (
+  context: OverpaymentContext,
+  paymentId: PaymentId,
+  clockBehindMs: number
+) => {
+  await runMutationWithCompletion((options) =>
+    context.evolu.update(
+      "payment",
+      {
+        id: paymentId,
+        excessAcknowledgedAt: TimestampMs(Date.now() - clockBehindMs),
+      },
+      { ...options, owner: context.evolu.appOwner }
+    )
+  )
+}
+
+const linesMoving = async (
+  context: OverpaymentContext,
+  billId: BillId,
+  names: ReadonlyArray<string>,
+  targetBillId: BillId | null = null
+) => {
+  await using run = testCreateRun(context.deps)
+  const summaries = await run.ok(loadCalculatedBillLineSummaries(billId))
+  return summaries
+    .filter((summary) => names.includes(summary.name))
+    .flatMap((summary) => {
+      const line = {
+        deviceId: null,
+        catalogItemId: summary.catalogItemId,
+        itemId: summary.itemId,
+        type: summary.type,
+        quantity: summary.quantity,
+        totalAmount: summary.totalAmount,
+      }
+      return [
+        { ...line, billId, kind: "remove" as const },
+        ...(targetBillId === null
+          ? []
+          : [{ ...line, billId: targetBillId, kind: "add" as const }]),
+      ]
+    })
+}
+
+describe("Ask before the edit", () => {
+  test("Removing every line after a guest paid", async () => {
+    await using context = await createOverpaymentContext()
+    const billId = await context.createBillOf([
+      { name: "Soup", unitAmount: 250, quantity: 2 },
+    ])
+    const paymentId = await context.createTestPayment({ amount: 250, billId })
+    await context.settleWithTransfer(paymentId, 250)
+    await using run = testCreateRun(context.deps)
+
+    expect(
+      await run.orThrow(
+        loadBillEditOutcome(
+          billId,
+          await linesMoving(context, billId, ["Soup"])
+        )
+      )
+    ).toEqual({ type: "overpaid", unresolved: 250 })
+  })
+
+  test("Removal that leaves the bill paid exactly", async () => {
+    await using context = await createOverpaymentContext()
+    const billId = await context.createBillOf([
+      { name: "Dinner", unitAmount: 5_000, quantity: 1 },
+      { name: "Wine", unitAmount: 5_000, quantity: 1 },
+    ])
+    const paymentId = await context.createTestPayment({ amount: 5_000, billId })
+    await context.settleInCash(paymentId, 5_000)
+    await using run = testCreateRun(context.deps)
+
+    expect(
+      await run.orThrow(
+        loadBillEditOutcome(
+          billId,
+          await linesMoving(context, billId, ["Wine"])
+        )
+      )
+    ).toEqual({ type: "paid" })
+  })
+
+  test("Split that leaves the bill paid exactly", async () => {
+    await using context = await createOverpaymentContext()
+    const billId = await context.createBillOf([
+      { name: "Dinner", unitAmount: 5_000, quantity: 1 },
+      { name: "Wine", unitAmount: 5_000, quantity: 1 },
+    ])
+    const targetBillId = await context.createBillOf([])
+    const paymentId = await context.createTestPayment({ amount: 5_000, billId })
+    await context.settleInCash(paymentId, 5_000)
+    await using run = testCreateRun(context.deps)
+
+    expect(
+      await run.orThrow(
+        loadBillEditOutcome(
+          billId,
+          await linesMoving(context, billId, ["Wine"], targetBillId)
+        )
+      )
+    ).toEqual({ type: "paid" })
+  })
+
+  test("an edit that leaves the bill underpaid, or a bill nobody paid, asks nothing", async () => {
+    await using context = await createOverpaymentContext()
+    const billId = await context.createBillOf([
+      { name: "Dinner", unitAmount: 5_000, quantity: 1 },
+      { name: "Wine", unitAmount: 5_000, quantity: 1 },
+    ])
+    const unpaidBillId = await context.createBillOf([
+      { name: "Soup", unitAmount: 250, quantity: 1 },
+    ])
+    const paymentId = await context.createTestPayment({ amount: 2_000, billId })
+    await context.settleInCash(paymentId, 2_000)
+    await using run = testCreateRun(context.deps)
+
+    expect(
+      await run.orThrow(
+        loadBillEditOutcome(
+          billId,
+          await linesMoving(context, billId, ["Wine"])
+        )
+      )
+    ).toEqual({ type: "staysOpen" })
+    expect(
+      await run.orThrow(
+        loadBillEditOutcome(
+          unpaidBillId,
+          await linesMoving(context, unpaidBillId, ["Soup"])
+        )
+      )
+    ).toEqual({ type: "staysOpen" })
+  })
+})
 
 describe("loadOverpaymentInput", () => {
   test("times claims and resolutions by the sync clock of their first write", async () => {
@@ -38,7 +184,7 @@ describe("loadOverpaymentInput", () => {
     await context.settleInCash(paymentId, 25_000)
     await context.settleByTransfer(paymentId)
     await using run = testCreateRun(context.deps)
-    await run.orThrow(acknowledgePaymentExcessSettlement(paymentId))
+    await acknowledgeAsAnOlderVersion(context, paymentId, 0)
 
     const input = await run.orThrow(loadOverpaymentInput({ paymentId }))
     const acknowledged = input.payments[0]?.acknowledgementClock ?? ""
@@ -47,5 +193,47 @@ describe("loadOverpaymentInput", () => {
     expect(
       input.transactions.every(({ claimClock }) => claimClock < acknowledged)
     ).toBe(true)
+  })
+})
+
+describe("Acknowledged extra money counts as kept", () => {
+  const clocksBehind = [0, 10 * 60_000]
+
+  test("Acknowledged before the change", async () => {
+    for (const clockBehindMs of clocksBehind) {
+      await using context = await createOverpaymentContext()
+      const paymentId = await context.createTestPayment({ amount: 25_000 })
+      await context.settleInCash(paymentId, 25_000)
+      await context.settleByTransfer(paymentId)
+
+      await acknowledgeAsAnOlderVersion(context, paymentId, clockBehindMs)
+
+      expect((await context.deriveOverpayment({ paymentId })).unresolved).toBe(
+        0
+      )
+    }
+  })
+
+  test("Money after the acknowledgement", async () => {
+    for (const clockBehindMs of clocksBehind) {
+      await using context = await createOverpaymentContext()
+      const billId = await context.createBillOf([
+        { name: "Dinner", unitAmount: 50_000, quantity: 1 },
+      ])
+      const acknowledged = await context.createTestPayment({
+        amount: 25_000,
+        billId,
+      })
+      const later = await context.createTestPayment({ amount: 25_000, billId })
+      await context.settleInCash(acknowledged, 25_000)
+      await context.settleByTransfer(acknowledged)
+
+      await acknowledgeAsAnOlderVersion(context, acknowledged, clockBehindMs)
+      await context.settleByTransfer(later)
+
+      expect((await context.deriveOverpayment({ billId })).unresolved).toBe(
+        25_000
+      )
+    }
   })
 })

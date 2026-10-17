@@ -6,7 +6,7 @@ import {
 } from "@evolu/common"
 
 import { createQuery } from "../../evolu/schema.ts"
-import type { BillId, OverpaymentScope } from "../bill/bill-types.ts"
+import type { BillId, OverpaymentScopes } from "../bill/bill-types.ts"
 import type { PaymentId } from "../payment/payment-types.ts"
 import { quotedAmountSatsSql } from "../shared/claimed-amount.ts"
 import type { NonNegativeInteger } from "../shared/schema.ts"
@@ -295,7 +295,7 @@ export const pendingQerkoTerminalRefundAttemptsQuery = createQuery((db) =>
     .$narrowType<{ transactionId: KyselyNotNull }>()
 )
 
-export const overpaymentRefundsQuery = (scope: OverpaymentScope) =>
+export const overpaymentRefundsQuery = (scopes: OverpaymentScopes) =>
   createQuery((db) =>
     db
       .selectFrom("refund")
@@ -303,6 +303,7 @@ export const overpaymentRefundsQuery = (scope: OverpaymentScope) =>
       .select([
         "refund.id",
         "refund.paymentId",
+        "payment.billId as billId",
         "refund.deviceId",
         "refund.amount",
         "refund.isTip",
@@ -312,9 +313,14 @@ export const overpaymentRefundsQuery = (scope: OverpaymentScope) =>
         "refund.mainRefundId",
       ])
       .where((eb) =>
-        scope.billId === undefined
-          ? eb("payment.id", "=", scope.paymentId)
-          : eb("payment.billId", "=", scope.billId)
+        eb.or([
+          ...(scopes.billIds.length === 0
+            ? []
+            : [eb("payment.billId", "in", scopes.billIds)]),
+          ...(scopes.paymentIds.length === 0
+            ? []
+            : [eb("payment.id", "in", scopes.paymentIds)]),
+        ])
       )
       .where("payment.isDeleted", "is not", sqliteTrue)
       .where("refund.isDeleted", "is not", sqliteTrue)

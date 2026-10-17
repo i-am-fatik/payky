@@ -21,6 +21,16 @@ export const csBill = {
   "bill.collision.title": "Zrušeno, ale platby ho pokrývají",
   "bill.collision.viewPayment": "Zobrazit platbu",
   "bill.collision.viewPayment.numbered": "Zobrazit platbu {number}",
+  "bill.cover.cancel": "Zrušit",
+  "bill.cover.confirm": "Pokračovat",
+  "bill.cover.overpaid.description":
+    "Tím se účet uzavře. Pak zvolíte, zda se peníze vrátí, zda šlo o spropitné, nebo zůstanou podniku.",
+  "bill.cover.overpaid.title": "Účet by byl přeplacen o {amount}",
+  "bill.cover.paid.description":
+    "Na účtu zůstane přesně tolik, kolik bylo zaplaceno.",
+  "bill.cover.paid.title": "Účet by byl zaplacen a uzavřen",
+  "bill.cover.split.description":
+    "Zaplacené peníze zůstanou u tohoto účtu a pokryjí, co na něm zůstane.",
   "bill.discard": "Zahodit účet",
   "bill.discard.confirm.cancel": "Zachovat účet",
   "bill.discard.confirm.confirm": "Zahodit",
@@ -112,6 +122,7 @@ export const csBill = {
   "billDetail.notFound": "Účet nebyl nalezen.",
   "billDetail.payments": "Platby",
   "billDetail.payments.empty": "K tomuto účtu zatím neproběhla žádná platba.",
+  "billDetail.payments.numberedAmount": "č. {number} · {amount}",
   "billDetail.title": "Detail účtu",
   "billHistory.empty.description": "Vytvořené účty se zobrazí zde.",
   "billHistory.empty.title": "Zatím žádné účty",

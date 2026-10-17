@@ -2,8 +2,11 @@ import { type Id, ok, type Task } from "@evolu/common"
 
 import type { EvoluOwnerDep } from "../../deps.ts"
 import type { AppSchema } from "../../evolu/schema.ts"
+import type { BillLineRow } from "../bill-line/bill-line.ts"
+import { deriveBillTotalAfterLines } from "../bill-line/bill-line-utils.ts"
 import { eetReportedGoodsQuery } from "../eet/eet-queries.ts"
 import { overpaymentResolutionsQuery } from "../overpayment-resolution/overpayment-resolution-queries.ts"
+import type { OverpaymentResolutionId } from "../overpayment-resolution/overpayment-resolution-types.ts"
 import type { PaymentId } from "../payment/payment-types.ts"
 import { overpaymentRefundsQuery } from "../refund/refund-queries.ts"
 import type { EvoluDep } from "../shared/evolu-deps.ts"
@@ -11,7 +14,7 @@ import {
   mapWriteClocks,
   writeClocksQuery,
 } from "../shared/evolu-history-queries.ts"
-import { NonNegativeInteger } from "../shared/schema.ts"
+import { type FiatCurrency, NonNegativeInteger } from "../shared/schema.ts"
 import {
   overpaymentPaymentsQuery,
   overpaymentTransactionsQuery,
@@ -24,8 +27,16 @@ import {
   deriveReportedGoodsByPayment,
   toBillOverpaymentInput,
 } from "./bill-overpayment-utils.ts"
-import type { OverpaymentScope, SyncClockHex } from "./bill-types.ts"
-import type { BillOverpaymentInput } from "./bill-utils.ts"
+import {
+  type BillId,
+  type OverpaymentScope,
+  overpaymentScopesOf,
+  type SyncClockHex,
+} from "./bill-types.ts"
+import {
+  type BillOverpaymentInput,
+  deriveBillOverpayment,
+} from "./bill-utils.ts"
 
 export const loadWriteClocks =
   <TId extends Id>({
@@ -86,11 +97,12 @@ export const loadOverpaymentInput =
   ): Task<BillOverpaymentInput, BillNotFoundError, EvoluDep & EvoluOwnerDep> =>
   async (run) => {
     const { evolu } = run.deps
+    const scopes = overpaymentScopesOf(scope)
     const [payments, transactions, refunds, resolutions] = await Promise.all([
-      evolu.loadQuery(overpaymentPaymentsQuery(scope)),
-      evolu.loadQuery(overpaymentTransactionsQuery(scope)),
-      evolu.loadQuery(overpaymentRefundsQuery(scope)),
-      evolu.loadQuery(overpaymentResolutionsQuery(scope)),
+      evolu.loadQuery(overpaymentPaymentsQuery(scopes)),
+      evolu.loadQuery(overpaymentTransactionsQuery(scopes)),
+      evolu.loadQuery(overpaymentRefundsQuery(scopes)),
+      evolu.loadQuery(overpaymentResolutionsQuery(scopes)),
     ])
     const total = await run(loadOverpaymentTotal(scope, payments))
     if (!total.ok) return total
@@ -148,3 +160,90 @@ export const loadReportedGoodsByPayment =
         await run.deps.evolu.loadQuery(eetReportedGoodsQuery(scope))
       )
     )
+
+export type BillEditOutcome =
+  | { readonly type: "staysOpen" }
+  | { readonly type: "paid" }
+  | { readonly type: "overpaid"; readonly unresolved: NonNegativeInteger }
+
+export const loadBillEditOutcome =
+  (
+    billId: BillId,
+    lines: ReadonlyArray<
+      Pick<
+        BillLineRow,
+        | "billId"
+        | "catalogItemId"
+        | "itemId"
+        | "type"
+        | "kind"
+        | "quantity"
+        | "totalAmount"
+      >
+    >
+  ): Task<BillEditOutcome, BillNotFoundError, EvoluDep & EvoluOwnerDep> =>
+  async (run) => {
+    const snapshot = await run(loadBillStatusSnapshot(billId))
+    if (!snapshot.ok) return snapshot
+    const { status, items, hasActiveClaim, claimedSum } = snapshot.value
+    const billTotal = deriveBillTotalAfterLines(
+      items,
+      lines.filter((line) => line.billId === billId)
+    )
+    if (status !== "open" || !hasActiveClaim || claimedSum < billTotal) {
+      return ok({ type: "staysOpen" })
+    }
+
+    const input = await run(loadOverpaymentInput({ billId }))
+    if (!input.ok) return input
+    const { unresolved } = deriveBillOverpayment({ ...input.value, billTotal })
+    return ok(
+      unresolved === 0 ? { type: "paid" } : { type: "overpaid", unresolved }
+    )
+  }
+
+export interface AnsweredOverpaymentTip {
+  readonly currency: FiatCurrency
+  readonly amount: NonNegativeInteger
+}
+
+export const loadAnsweredOverpaymentTips =
+  (
+    tips: ReadonlyArray<{
+      readonly id: OverpaymentResolutionId
+      readonly paymentId: PaymentId
+      readonly billId: BillId | null
+      readonly currency: FiatCurrency
+    }>
+  ): Task<
+    ReadonlyArray<AnsweredOverpaymentTip>,
+    never,
+    EvoluDep & EvoluOwnerDep
+  > =>
+  async (run) => {
+    const scopes = new Map<string, OverpaymentScope>(
+      tips.map(({ billId, paymentId }) =>
+        billId === null ? [paymentId, { paymentId }] : [billId, { billId }]
+      )
+    )
+    const inputs = await Promise.all(
+      [...scopes.values()].map((scope) => run(loadOverpaymentInput(scope)))
+    )
+    const answered = new Map(
+      inputs.flatMap((input) =>
+        input.ok
+          ? deriveBillOverpayment(input.value).answers.flatMap((answer) =>
+              answer.source.type === "tip" && !answer.isWithdrawn
+                ? [[answer.source.id, answer.answered] as const]
+                : []
+            )
+          : []
+      )
+    )
+    return ok(
+      tips.map(({ id, currency }) => ({
+        currency,
+        amount: answered.get(id) ?? NonNegativeInteger(0),
+      }))
+    )
+  }
