@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core"
+import type { SyncStateDep } from "@evolu/common/local-first"
 import { createRun } from "@evolu/web"
 import {
   cashuBackgroundJobs,
@@ -6,6 +7,7 @@ import {
 } from "@payky/core/background-jobs/background-jobs"
 import { runBackgroundJobs } from "@payky/core/background-jobs/run-background-jobs"
 import { createDateDep } from "@payky/core/deps"
+import { createAppOwnerSync } from "@payky/core/evolu/app-owner-sync"
 import type { Evolu } from "@payky/core/evolu/schema"
 import { createEetApiDep } from "@payky/core/integrations/eet/eet-client"
 import { createNostrDep } from "@payky/core/integrations/nostr/nostr-client"
@@ -26,6 +28,7 @@ import {
   cashuWalletDepAtom,
   evoluAtom,
 } from "@/atoms/evolu.ts"
+import { runAtom } from "@/atoms/run.ts"
 import { appEnv } from "@/core/app-env.ts"
 import { useConsole } from "@/hooks/use-console.ts"
 import { createE2eSparkWalletDep } from "@/platform/e2e-spark-wallet.ts"
@@ -39,11 +42,13 @@ type Console = ReturnType<typeof useConsole>
 /** The app's own job context, without the Cashu wallet. */
 const createAppJobDeps = ({
   evolu,
+  syncState,
   deviceId,
   masterKey,
   console,
 }: {
   readonly evolu: Evolu
+  readonly syncState: SyncStateDep["syncState"]
   readonly deviceId: DeviceId
   readonly masterKey: MasterKey
   readonly console: Console
@@ -53,6 +58,7 @@ const createAppJobDeps = ({
   return {
     evolu,
     evoluOwner: evolu.appOwner,
+    appOwnerSync: createAppOwnerSync(syncState, evolu),
     deviceId,
     ...dateDep,
     ...fetchDep,
@@ -139,9 +145,10 @@ export function AppBackgroundJobs() {
   const console = useConsole()
   const deviceId = account.device.id
   const { masterKey } = account
+  const { syncState } = useAtomValue(runAtom).deps
   const start = useCallback(() => {
     const run = createRun(
-      createAppJobDeps({ evolu, deviceId, masterKey, console })
+      createAppJobDeps({ evolu, syncState, deviceId, masterKey, console })
     )
     return {
       run,
@@ -151,7 +158,7 @@ export function AppBackgroundJobs() {
         )
       ),
     }
-  }, [console, deviceId, evolu, masterKey])
+  }, [console, deviceId, evolu, masterKey, syncState])
 
   useBackgroundJobs({ isDemo: account.demo !== null, console, start })
 
@@ -172,9 +179,10 @@ export function CashuBackgroundJobs() {
   const console = useConsole()
   const deviceId = account.device.id
   const { masterKey } = account
+  const { syncState } = useAtomValue(runAtom).deps
   const start = useCallback(() => {
     const run = createRun({
-      ...createAppJobDeps({ evolu, deviceId, masterKey, console }),
+      ...createAppJobDeps({ evolu, syncState, deviceId, masterKey, console }),
       deviceEvolu,
       masterKey,
       ...createNostrDep(appEnv.VITE_PAYKY_NOSTR_RELAYS),
@@ -190,6 +198,7 @@ export function CashuBackgroundJobs() {
     deviceId,
     evolu,
     masterKey,
+    syncState,
   ])
 
   useBackgroundJobs({ isDemo: account.demo !== null, console, start })

@@ -10,8 +10,17 @@ import { createNodeEvolu } from "../runtime/node-evolu.ts"
 
 type NodeEvolu = Awaited<ReturnType<typeof createNodeEvolu>>
 
+export interface SyncedDevice {
+  readonly evolu: NodeEvolu["evolu"]
+  readonly appOwnerSync: NodeEvolu["appOwnerSync"]
+  readonly connect: () => void
+  readonly disconnect: () => void
+}
+
 export interface SyncedDevices extends AsyncDisposable {
-  readonly addDevice: () => Promise<NodeEvolu["evolu"]>
+  readonly addDevice: (options?: {
+    readonly online?: boolean
+  }) => Promise<SyncedDevice>
 }
 
 export const createSyncedDevices = async (
@@ -37,15 +46,27 @@ export const createSyncedDevices = async (
   const disposables = disposer.move()
 
   return {
-    addDevice: async () =>
-      devices.use(
-        await createNodeEvolu("memory", {
-          masterKey,
-          transports: [
+    addDevice: async ({ online = true } = {}) => {
+      const { evolu, appOwnerSync } = devices.use(
+        await createNodeEvolu("memory", { masterKey, transports: [] })
+      )
+      let unuse: (() => void) | null = null
+      const device: SyncedDevice = {
+        evolu,
+        appOwnerSync,
+        connect: () => {
+          unuse ??= evolu.useOwner(evolu.appOwner, [
             { type: "WebSocket", url: `ws://localhost:${relay.port}` },
-          ],
-        })
-      ).evolu,
+          ])
+        },
+        disconnect: () => {
+          unuse?.()
+          unuse = null
+        },
+      }
+      if (online) device.connect()
+      return device
+    },
     [Symbol.asyncDispose]: () => disposables.disposeAsync(),
   }
 }

@@ -4,6 +4,7 @@ import {
 } from "@payky/core/background-jobs/background-jobs"
 import { runBackgroundJobs } from "@payky/core/background-jobs/run-background-jobs"
 import { createDateDep } from "@payky/core/deps"
+import { createAppOwnerSync } from "@payky/core/evolu/app-owner-sync"
 import type { Evolu } from "@payky/core/evolu/schema"
 import { createEetApiDep } from "@payky/core/integrations/eet/eet-client"
 import { createNostrDep } from "@payky/core/integrations/nostr/nostr-client"
@@ -55,6 +56,7 @@ const createJobDeps = ({
   return {
     evolu,
     evoluOwner: evolu.appOwner,
+    appOwnerSync: createAppOwnerSync(nativeRun.deps.syncState, evolu),
     deviceId,
     ...dateDep,
     ...fetchDep,

@@ -1,4 +1,5 @@
 import { testCreateRun } from "@evolu/common"
+import { testSyncedAppOwner } from "@payky/core/testing/app-owner-sync"
 import { createEvoluTest } from "@payky/core/testing/evolu"
 import { createCommand } from "commander"
 import { afterEach, describe, expect, test } from "vitest"
@@ -16,6 +17,7 @@ describe("background-jobs run", () => {
     await using run = testCreateRun({
       evolu,
       evoluOwner: evolu.appOwner,
+      ...testSyncedAppOwner,
       databasePath: "payky.db",
     })
     const program = createCommand()

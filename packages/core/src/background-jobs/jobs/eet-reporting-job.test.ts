@@ -69,6 +69,7 @@ import {
 import { upsertBillSelfPayReferences } from "../../modules/table-self-pay/table-self-pay-actions.ts"
 import { deriveBillSelfPayReference } from "../../modules/table-self-pay/table-self-pay-reference-utils.ts"
 import { createSparkWalletDep } from "../../spark/spark-wallet.ts"
+import { testSyncedAppOwner } from "../../testing/app-owner-sync.ts"
 import type { AppBackgroundJobContext } from "../background-job-types.ts"
 import {
   createEetReportingJob,
@@ -118,6 +119,7 @@ const startJob = async (
     ...connectivity,
     ...createSparkWalletDep(),
     ...createYadioApiDep(),
+    ...testSyncedAppOwner,
     tableSelfPayRoot: new Uint8Array(32),
     selfPayDefaultRelays: [],
     nostrRelayClient: createNostrRelayClient(),

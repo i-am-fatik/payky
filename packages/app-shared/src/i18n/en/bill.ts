@@ -67,6 +67,8 @@ export const enBill = {
   "bill.split.destination.new": "New bill",
   "bill.split.error": "Couldn't split the bill. Please try again.",
   "bill.split.increase.aria": "Add one {name} to the split",
+  "bill.split.leavesOverpayment":
+    "The bill keeps the money paid for it, so it can't give away items worth more than what is still unpaid.",
   "bill.split.selectAll": "Select all",
   "bill.split.selectedCount": "Selected:",
   "bill.split.staleSelection":

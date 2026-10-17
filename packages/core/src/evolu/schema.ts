@@ -24,7 +24,7 @@ import {
   accountTransactionSparkInvoice,
 } from "../modules/account-transaction/account-transaction.ts"
 import { appSettings } from "../modules/app-settings/app-settings.ts"
-import { bill, billIndexes } from "../modules/bill/bill.ts"
+import { _billClosingCursor, bill, billIndexes } from "../modules/bill/bill.ts"
 import { billLine, billLineIndexes } from "../modules/bill-line/bill-line.ts"
 import {
   _cashuBookingCursor,
@@ -132,6 +132,7 @@ export const AppSchema = {
   taxRate,
   table,
   bill,
+  _billClosingCursor,
   billLine,
   payment,
   paymentCashRegister,

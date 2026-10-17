@@ -16,6 +16,7 @@ import {
   NonNegativeInteger,
   type TimestampMs,
 } from "../shared/schema.ts"
+import type { TableId } from "../table/table-types.ts"
 import type { BillCoverage, BillStatus, SyncClockHex } from "./bill-types.ts"
 
 /**
@@ -885,3 +886,9 @@ export const hasPendingPayment = (
   now: Date
 ): boolean =>
   derivePendingPaymentIds(payments, claimedPaymentIds, now).length > 0
+
+export const deriveOpenBillTableId = (
+  tableId: TableId | null,
+  liveTableIds: ReadonlySet<TableId>
+): TableId | null =>
+  tableId !== null && liveTableIds.has(tableId) ? tableId : null

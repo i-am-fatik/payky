@@ -11,8 +11,8 @@ import { deriveBillSummaryTotal } from "@payky/core/modules/bill-line/bill-line-
 import { overpaymentResolutionsQuery } from "@payky/core/modules/overpayment-resolution/overpayment-resolution-queries"
 import { overpaymentRefundsQuery } from "@payky/core/modules/refund/refund-queries"
 import {
-  firstWriteClocksQuery,
-  mapFirstWriteClocks,
+  mapWriteClocks,
+  writeClocksQuery,
 } from "@payky/core/modules/shared/evolu-history-queries"
 import { NonNegativeInteger } from "@payky/core/modules/shared/schema"
 import { useMemo } from "react"
@@ -33,14 +33,15 @@ const useFirstWriteClocks = <TId extends Id>(
   const { data } = useOptionalEvoluQuery(
     ids.length === 0
       ? null
-      : firstWriteClocksQuery({
+      : writeClocksQuery({
           ownerId: evolu.appOwner.id,
           table,
           column,
           ids,
+          pick: "first",
         })
   )
-  return useMemo(() => mapFirstWriteClocks(ids, data), [ids, data])
+  return useMemo(() => mapWriteClocks(ids, data), [ids, data])
 }
 
 export function useOverpaymentInput(

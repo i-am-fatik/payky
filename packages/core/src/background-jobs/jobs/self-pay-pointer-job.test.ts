@@ -13,6 +13,7 @@ import {
   receiveBankTransfer,
   type SelfPayTestContext,
 } from "../../modules/table-self-pay/table-self-pay-test-fixtures.ts"
+import { testSyncedAppOwner } from "../../testing/app-owner-sync.ts"
 import type { AppBackgroundJobContext } from "../background-job-types.ts"
 import {
   createSelfPayPointerJob,
@@ -28,6 +29,7 @@ const startJob = async (context: SelfPayTestContext) => {
     ...context.deps,
     ...createEetApiDep({ date: context.deps.date, fetch }),
     ...createYadioApiDep(),
+    ...testSyncedAppOwner,
     fetch,
     deviceId: context.deviceId,
     connectivity: { onOnline: () => () => undefined },

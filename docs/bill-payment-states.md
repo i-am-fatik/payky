@@ -235,10 +235,10 @@ keeps it out of every coverage sum.
   same shape and role as `payment.confirmedPaidAt`.
 - `bill.closedAt: timestamp | null` — **not** a source of truth for
   anything. A best-effort, self-healing *cache*: written (idempotently)
-  whenever a claim brings the bill's coverage out of `underpaid`, regardless
-  of `canceledAt` — see ["`closedAt` is a cache, not a
-  status"](#closedat-is-a-cache-not-a-status) below for why it exists and
-  what its one job is.
+  whenever a claim, or a line edit on a bill that already has one, brings
+  the bill's coverage out of `underpaid`, regardless of `canceledAt` — see
+  ["`closedAt` is a cache, not a status"](#closedat-is-a-cache-not-a-status)
+  below for why it exists and what its one job is.
 
 There is no `bill.status` column. `open`/`closed`/`canceled` is derived at
 read time — see the next section — the same way a payment's display status
@@ -342,6 +342,11 @@ of cases, because `closedAt` is written (via `loadBillClosedAtIfCovered`,
 folded into the same mutation batch as the confirming claim — see
 `reconciliation-claim-actions.ts`) the moment a claim brings the bill out of
 `underpaid`, the same trigger `deriveBillStatus`'s priority 3 reacts to live.
+Lines leaving the bill are the other way out of `underpaid`: once a guest
+has paid a share, staff can remove, undo or split off what is left. Each of
+those writes `closedAt` in the same batch as the lines when the claimed money
+covers what remains, so the bill leaves the floor view, its table's self-pay
+view and the open-bill lists the moment its detail reads `closed`.
 
 The two can disagree, briefly: under CRDT/multi-device concurrency, two
 split payments on the same bill confirmed at nearly the same time can each

@@ -23,8 +23,8 @@ const createdAtQuery = (id: OverpaymentResolutionId) =>
 describe("overpaymentResolution", () => {
   test("keeps the createdAt of its first write through a second sync", async () => {
     await using devices = await createSyncedDevices()
-    const recording = await devices.addDevice()
-    const withdrawing = await devices.addDevice()
+    const { evolu: recording } = await devices.addDevice()
+    const { evolu: withdrawing } = await devices.addDevice()
     const paymentId = createRowId<"Payment">()
     const tipId = await runMutationWithCompletion(
       (options) =>
@@ -72,7 +72,7 @@ describe("overpaymentResolution", () => {
         { timeout: 10_000 }
       )
       .toBe(1)
-    const joining = await devices.addDevice()
+    const { evolu: joining } = await devices.addDevice()
 
     await expect
       .poll(() => joining.loadQuery(createdAtQuery(tipId)), {

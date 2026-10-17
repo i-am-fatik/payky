@@ -3,6 +3,7 @@ import { runMain } from "@evolu/nodejs"
 import { nativeBackgroundJobs } from "@payky/core/background-jobs/background-jobs"
 import { runBackgroundJobs } from "@payky/core/background-jobs/run-background-jobs"
 import {
+  type AppOwnerSyncDep,
   createDateDep,
   type EvoluOwnerDep,
   type TableSelfPayRootDep,
@@ -28,12 +29,14 @@ export const registerBackgroundJobsCommand =
     never,
     EvoluDep &
       EvoluOwnerDep &
+      AppOwnerSyncDep &
       ConsoleDep &
       CliDatabasePathDep &
       Partial<TableSelfPayRootDep>
   > =>
   (run) => {
-    const { evolu, evoluOwner, databasePath, tableSelfPayRoot } = run.deps
+    const { evolu, evoluOwner, appOwnerSync, databasePath, tableSelfPayRoot } =
+      run.deps
 
     const backgroundJobsCommand = createCommand("background-jobs").description(
       "Run Payky background workers."
@@ -60,6 +63,7 @@ export const registerBackgroundJobsCommand =
             console: appConsole,
             evolu,
             evoluOwner,
+            appOwnerSync,
             deviceId,
             tableSelfPayRoot,
             ...dateDep,

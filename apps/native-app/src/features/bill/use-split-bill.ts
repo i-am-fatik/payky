@@ -26,6 +26,7 @@ const splitBillErrorKeys = {
   BillLocked: "bill.locked",
   // The selection no longer matches the bill: retrying the same one cannot work.
   BillSplitSelectionStale: "bill.split.staleSelection",
+  BillSplitLeavesOverpayment: "bill.split.leavesOverpayment",
 } satisfies Record<SplitBillError["type"], TranslationKey>
 
 /**

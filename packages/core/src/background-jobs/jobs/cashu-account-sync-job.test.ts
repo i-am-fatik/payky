@@ -21,6 +21,7 @@ import {
 } from "../../modules/shared/key-derivation.ts"
 import { NonNegativeInteger } from "../../modules/shared/schema.ts"
 import { createSparkWalletDep } from "../../spark/spark-wallet.ts"
+import { testSyncedAppOwner } from "../../testing/app-owner-sync.ts"
 import {
   createCashuTest,
   testCashuMasterKey,
@@ -47,6 +48,7 @@ const setup = async () => {
       ...dateDep,
       ...fetchDep,
       ...createYadioApiDep(),
+      ...testSyncedAppOwner,
       ...createEetApiDep({ ...dateDep, ...fetchDep }),
       ...createSparkWalletDep(),
       tableSelfPayRoot: new Uint8Array(32),

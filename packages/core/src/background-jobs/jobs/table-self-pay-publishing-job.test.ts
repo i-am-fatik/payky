@@ -62,6 +62,7 @@ import {
   SelfPayViewSchema,
 } from "../../modules/table-self-pay/table-self-pay-view-utils.ts"
 import { createFakeSparkWallet } from "../../spark/spark-wallet-test-fixtures.ts"
+import { testSyncedAppOwner } from "../../testing/app-owner-sync.ts"
 import type { AppBackgroundJobContext } from "../background-job-types.ts"
 import { createTableSelfPayPublishingJob } from "./table-self-pay-publishing-job.ts"
 
@@ -112,6 +113,7 @@ const startJob = async (
     ...context.deps,
     ...createEetApiDep({ date: context.deps.date, fetch }),
     ...createYadioApiDep(),
+    ...testSyncedAppOwner,
     fetch,
     deviceId: context.deviceId,
     connectivity: { onOnline: () => () => undefined },

@@ -68,6 +68,8 @@ export const csBill = {
   "bill.split.destination.new": "Nový účet",
   "bill.split.error": "Rozdělení účtu se nezdařilo. Zkus to prosím znovu.",
   "bill.split.increase.aria": "Přidat jeden kus {name} do rozdělení",
+  "bill.split.leavesOverpayment":
+    "Peníze zaplacené za účet na něm zůstávají, takže z něj nejde oddělit položky za víc, než kolik zbývá zaplatit.",
   "bill.split.selectAll": "Vybrat vše",
   "bill.split.selectedCount": "Vybráno:",
   "bill.split.staleSelection":
