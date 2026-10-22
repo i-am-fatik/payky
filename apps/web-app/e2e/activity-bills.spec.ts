@@ -652,6 +652,100 @@ test("It's a tip and Keep it each say what they mean, in full on a 320 px phone 
   })
 })
 
+test("returning an overpayment says how much is above the bill, warns about goods, and reads as a returned overpayment", async ({
+  seededPage: page,
+}) => {
+  await addCatalogItem(page, "en", { name: "Coffee", price: "5" })
+  const billId = await startBillAndBeginCashPayment(page, "en")
+  await prepareIbanPayment(page, "en")
+  await page
+    .getByRole("tab", { name: translate("en", "paymentWait.method.cash") })
+    .click()
+  await markCashPaid(page, "en")
+  await simulateDuplicateSettlement(page)
+  await waitForLocalWriteToSettle(page)
+  await gotoPage(page, `/activity/bills/${billId}`, "en", "billDetail.title")
+  const returned = translateParams("en", "refund.state.overpayment", {
+    amount: "$4.00",
+  })
+  const dialog = page.getByRole("dialog")
+  const amount = dialog.getByLabel(
+    translate("en", "refund.dialog.amount.label")
+  )
+
+  await test.step("Return it states the overpayment", async () => {
+    await openOverpaymentReturn(page, "en")
+    await expect(dialog).toContainText(
+      translateParams("en", "overpayment.title", { amount: "$5.00" })
+    )
+  })
+
+  await test.step("an amount above what the payment received is reported only once the field is left", async () => {
+    const tooMuch = translateParams("en", "refund.dialog.amount.invalid", {
+      amount: "$10.00",
+    })
+    await amount.fill("11")
+    await expect(dialog.getByText(tooMuch)).toBeHidden()
+    await expect(amount).toHaveAttribute("aria-invalid", "false")
+    await amount.blur()
+    await expect(dialog.getByText(tooMuch)).toBeVisible()
+    await expect(amount).toHaveAttribute("aria-invalid", "true")
+    await expect(amount).toHaveAccessibleDescription(tooMuch)
+  })
+
+  await test.step("an amount above the overpayment warns about the part refunded as goods", async () => {
+    const goodsPart = dialog.getByText(
+      translateParams("en", "refund.dialog.goodsPart", { amount: "$2.00" })
+    )
+    await amount.fill("7")
+    await expect(goodsPart).toBeVisible()
+    await amount.fill("4")
+    await expect(goodsPart).toBeHidden()
+    await confirmRefund(dialog, "en")
+  })
+
+  await test.step("the payment row's badge reads as a returned overpayment", async () => {
+    await expect(page.getByRole("link").getByTestId("refund-badge")).toHaveText(
+      returned
+    )
+  })
+
+  await test.step("the payment's refunds list it as a returned overpayment", async () => {
+    await page.getByRole("link").filter({ hasText: returned }).click()
+    await page
+      .getByRole("heading", { name: translate("en", "paymentDetail.title") })
+      .waitFor()
+    const refunds = page.getByTestId("payment-detail-refunds")
+    await expect(refunds.getByTestId("refund-badge")).toHaveText(returned)
+    const refund = refunds.getByTestId("payment-detail-refund")
+    await expect(refund).toContainText(
+      translate("en", "paymentDetail.refunds.overpayment")
+    )
+    await expect(refund).toContainText("$4.00")
+  })
+
+  await test.step("a refund that also gave goods back names only its overpayment part", async () => {
+    await openRefundDialog(page, "en")
+    await expect(dialog).toContainText(
+      translateParams("en", "overpayment.title", { amount: "$1.00" })
+    )
+    await amount.fill("3")
+    await confirmRefund(dialog, "en")
+    const refunds = page.getByTestId("payment-detail-refunds")
+    await expect(
+      refunds.getByTestId("payment-detail-refund").filter({ hasText: "$3.00" })
+    ).toContainText(
+      translateParams("en", "paymentDetail.refunds.overpaymentIncluded", {
+        amount: "$1.00",
+      })
+    )
+    await expect(refunds.getByTestId("refund-badge")).toHaveText([
+      translateParams("en", "refund.state.overpayment", { amount: "$5.00" }),
+      translateParams("en", "refund.state.partial", { amount: "$2.00" }),
+    ])
+  })
+})
+
 test("an unresolved overpayment is shown above the bill's lines", async ({
   seededPage: page,
 }) => {

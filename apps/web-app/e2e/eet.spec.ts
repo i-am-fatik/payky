@@ -853,11 +853,11 @@ test("a payment settled twice reports the extra money, and refunding it reverses
     ).toBeVisible()
   })
 
-  await test.step("the history shows the payment partly refunded", async () => {
+  await test.step("the history shows the overpayment returned", async () => {
     await gotoPage(page, "/activity", "en", "activity.title")
     await expect(page.getByTestId("refund-badge").first()).toHaveText(
       new RegExp(
-        `^${translate("en", "refund.state.partial").split("{amount}")[0] ?? ""}`,
+        `^${translate("en", "refund.state.overpayment").split("{amount}")[0] ?? ""}`,
         "u"
       )
     )

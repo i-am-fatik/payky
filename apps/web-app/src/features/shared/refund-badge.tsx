@@ -1,4 +1,4 @@
-import { refundBadgeLabel } from "@payky/app-shared/activity-history"
+import { refundBadgeLabels } from "@payky/app-shared/activity-history"
 import type { PaymentRefundSummary } from "@payky/core/modules/refund/refund-utils"
 import { Badge } from "@/components/ui/badge.tsx"
 import { useLocale } from "@/hooks/use-locale.ts"
@@ -14,16 +14,15 @@ export function RefundBadge({
 }) {
   const { t } = useTranslation()
   const locale = useLocale()
-  const label = refundBadgeLabel(summary, t, locale)
-  if (label === null) return null
 
-  return (
+  return refundBadgeLabels(summary, t, locale).map((label) => (
     <Badge
+      key={label}
       variant="secondary"
       className={cn("bg-warning/10 text-warning", className)}
       data-testid="refund-badge"
     >
       {label}
     </Badge>
-  )
+  ))
 }

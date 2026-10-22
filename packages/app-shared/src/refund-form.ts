@@ -1,6 +1,13 @@
 import type { sqliteTrue } from "@evolu/common"
 import type { BillId } from "@payky/core/modules/bill/bill-types"
+import {
+  type BillOverpaymentInput,
+  deriveBillOverpayment,
+  deriveRefundOverpaymentAmount,
+  deriveReturnableOverpayment,
+} from "@payky/core/modules/bill/bill-utils"
 import type { ItemLineType } from "@payky/core/modules/item/item-types"
+import type { PaymentId } from "@payky/core/modules/payment/payment-types"
 import type { PaymentLineId } from "@payky/core/modules/payment-line/payment-line-types"
 import type {
   RefundPaymentError,
@@ -14,6 +21,7 @@ import {
   deriveRefundableTipAmount,
   deriveRefundPrefillAmount,
   type RefundableLine,
+  returnedOverpaymentOf,
   sumGoodsRefundAmounts,
   sumRefundAmounts,
 } from "@payky/core/modules/refund/refund-utils"
@@ -27,6 +35,9 @@ import {
   PositiveNumber,
 } from "@payky/core/modules/shared/schema"
 import type { TranslationKey } from "./i18n/resources.ts"
+import type { createTranslate } from "./i18n/translate.ts"
+
+type Translate = ReturnType<typeof createTranslate>
 
 /** The refund form's two ways to say what comes back (refund/0002). */
 export type RefundMode = "amount" | "items"
@@ -45,6 +56,27 @@ export const refundMethodLabelKey = {
   cashRegister: "paymentDetail.refunds.method.cashRegister",
   outside: "paymentDetail.refunds.method.outside",
 } satisfies Record<RefundMethod, TranslationKey>
+
+export const returnedOverpaymentLabel = ({
+  refund,
+  t,
+  format,
+}: {
+  readonly refund: {
+    readonly amount: NonNegativeInteger
+    readonly isTip: typeof sqliteTrue | null
+    readonly overpaymentAmount: NonNegativeInteger | null
+  }
+  readonly t: Translate
+  readonly format: (value: NonNegativeInteger) => string
+}): string => {
+  const returned = returnedOverpaymentOf(refund)
+  return returned < refund.amount
+    ? t("paymentDetail.refunds.overpaymentIncluded", {
+        amount: format(returned),
+      })
+    : t("paymentDetail.refunds.overpayment")
+}
 
 export const refundErrorKeys = {
   PaymentNotFound: "paymentDetail.notFound",
@@ -122,6 +154,51 @@ export const deriveRefundAvailability = ({
     canRefundTip: isPaid && refundableTipAmount > 0,
   }
 }
+
+export const deriveRefundOverpayment = (
+  overpaymentInput: BillOverpaymentInput | undefined,
+  paymentId: PaymentId
+) => {
+  if (overpaymentInput === undefined) {
+    return {
+      returnableOverpayment: NonNegativeInteger(0),
+      overpaidBy: NonNegativeInteger(0),
+    }
+  }
+  const returnableOverpayment = deriveReturnableOverpayment(
+    overpaymentInput,
+    paymentId
+  )
+  return {
+    returnableOverpayment,
+    overpaidBy: NonNegativeInteger(
+      Math.min(
+        returnableOverpayment,
+        deriveBillOverpayment(overpaymentInput).unresolved
+      )
+    ),
+  }
+}
+
+export const deriveGoodsPartOfReturn = ({
+  overpaymentInput,
+  paymentId,
+  amount,
+}: {
+  readonly overpaymentInput: BillOverpaymentInput | undefined
+  readonly paymentId: PaymentId
+  readonly amount: NonNegativeInteger | null
+}): NonNegativeInteger =>
+  overpaymentInput === undefined || amount === null
+    ? NonNegativeInteger(0)
+    : NonNegativeInteger(
+        amount -
+          deriveRefundOverpaymentAmount(overpaymentInput, {
+            paymentId,
+            amount,
+            kind: { type: "return" },
+          })
+      )
 
 /** The amount field's text: what staff typed, else the prefill for the method (refund/0005, 0006). */
 export const deriveRefundAmountText = ({

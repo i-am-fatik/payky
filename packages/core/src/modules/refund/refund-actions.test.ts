@@ -17,7 +17,10 @@ import {
 import { loadBillCoverage, loadBillStatus } from "../bill/bill-guards.ts"
 import { loadOverpaymentInput } from "../bill/bill-overpayment-guards.ts"
 import type { BillId } from "../bill/bill-types.ts"
-import { deriveReturnableOverpayment } from "../bill/bill-utils.ts"
+import {
+  deriveBillOverpayment,
+  deriveReturnableOverpayment,
+} from "../bill/bill-utils.ts"
 import { createCatalogItem } from "../catalog-item/catalog-item-actions.ts"
 import {
   configureEet,
@@ -62,6 +65,7 @@ import {
   overpaymentRefundsQuery,
   refundablePaymentLinesQuery,
   refundLinesByPaymentIdQuery,
+  refundSummariesByBillIdQuery,
   refundsByPaymentIdQuery,
 } from "./refund-queries.ts"
 import type { RefundMethod } from "./refund-types.ts"
@@ -70,6 +74,8 @@ import {
   deriveRefundableLines,
   deriveRefundPrefillAmount,
   sumGoodsRefundAmounts,
+  summarizeRefundsByPayment,
+  sumReturnedOverpayment,
 } from "./refund-utils.ts"
 
 const accountTransactionsQuery = (accountId: AccountId) =>
@@ -737,6 +743,7 @@ const refundOfferOf = async (
       currency: payment.currency,
     }),
     purpose: returnableOverpayment > 0 ? "overpayment" : "goods",
+    unresolvedOverpayment: deriveBillOverpayment(input).unresolved,
   }
 }
 
@@ -899,7 +906,11 @@ describe("Staff can refund a paid payment", () => {
 
     await expect(
       refundOfferOf(context, paymentId, "outside")
-    ).resolves.toMatchObject({ amount: 2_000, purpose: "overpayment" })
+    ).resolves.toMatchObject({
+      amount: 2_000,
+      purpose: "overpayment",
+      unresolvedOverpayment: 2_000,
+    })
   })
 
   test("Extra money on a bill still underpaid", async () => {
@@ -916,7 +927,11 @@ describe("Staff can refund a paid payment", () => {
 
     await expect(
       refundOfferOf(context, paymentId, "outside")
-    ).resolves.toMatchObject({ amount: 5_000, purpose: "overpayment" })
+    ).resolves.toMatchObject({
+      amount: 5_000,
+      purpose: "overpayment",
+      unresolvedOverpayment: 0,
+    })
   })
 
   test("Refund with nothing above the goods", async () => {
@@ -1005,6 +1020,43 @@ describe("a refund records what it returns of the overpayment", () => {
     })
 
     expect((await context.deriveOverpayment({ billId })).unresolved).toBe(0)
+  })
+
+  test("reads a refund by items of a coffee the bill no longer holds as a returned overpayment", async () => {
+    await using context = await createOverpaymentContext()
+    const billId = await context.createBillOf([
+      { name: "Coffee", unitAmount: 500, quantity: 1 },
+    ])
+    const paymentId = await context.createTestPayment({ amount: 500, billId })
+    await context.settleInCash(paymentId, 500)
+    await context.removeLineOnAnotherDevice(billId, "Coffee")
+    const [coffee] = await context.evolu.loadQuery(
+      refundablePaymentLinesQuery(paymentId)
+    )
+    if (coffee === undefined) throw new Error("No coffee")
+
+    await refundIn(context, {
+      paymentId,
+      method: "outside",
+      deviceId: null,
+      lines: [{ paymentLineId: coffee.id, quantity: PositiveNumber(1) }],
+    })
+
+    await expect(
+      context.evolu.loadQuery(
+        overpaymentRefundsQuery({ billIds: [billId], paymentIds: [] })
+      )
+    ).resolves.toMatchObject([{ purpose: "goods", overpaymentAmount: 500 }])
+    expect(
+      sumReturnedOverpayment(
+        await context.evolu.loadQuery(refundsByPaymentIdQuery(paymentId))
+      )
+    ).toBe(500)
+    expect(
+      summarizeRefundsByPayment(
+        await context.evolu.loadQuery(refundSummariesByBillIdQuery(billId))
+      ).get(paymentId)
+    ).toMatchObject({ refundedAmount: 500, returnedOverpaymentAmount: 500 })
   })
 })
 

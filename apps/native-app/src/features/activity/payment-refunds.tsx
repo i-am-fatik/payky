@@ -1,19 +1,22 @@
 import { formatDateTime } from "@payky/app-shared/format-date"
 import { formatMoney } from "@payky/app-shared/format-money"
 import {
+  deriveGoodsPartOfReturn,
   deriveRefundAmountText,
   deriveRefundAvailability,
   deriveRefundForm,
+  deriveRefundOverpayment,
   type RefundablePaymentLine,
   type RefundMode,
   type RefundQuantities,
   refundErrorKeys,
   refundMethodLabelKey,
+  returnedOverpaymentLabel,
   stepRefundQuantity,
   tipRefundErrorKeys,
 } from "@payky/app-shared/refund-form"
 import type { BillId } from "@payky/core/modules/bill/bill-types"
-import { deriveReturnableOverpayment } from "@payky/core/modules/bill/bill-utils"
+import type { BillOverpaymentInput } from "@payky/core/modules/bill/bill-utils"
 import { paymentDetailQuery } from "@payky/core/modules/payment/payment-queries"
 import type { PaymentId } from "@payky/core/modules/payment/payment-types"
 import { activeClaimedTransactionsByPaymentIdQuery } from "@payky/core/modules/reconciliation-claim/reconciliation-claim-queries"
@@ -34,7 +37,9 @@ import type {
 import {
   isTipRefund,
   type RefundableLine,
+  returnedOverpaymentOf,
   sumGoodsRefundAmounts,
+  sumReturnedOverpayment,
 } from "@payky/core/modules/refund/refund-utils"
 import { calculatePaymentExcess } from "@payky/core/modules/shared/claimed-amount"
 import {
@@ -44,10 +49,12 @@ import {
 import { useAtomValue } from "jotai"
 import Minus from "lucide-react-native/icons/minus"
 import Plus from "lucide-react-native/icons/plus"
+import TriangleAlert from "lucide-react-native/icons/triangle-alert"
 import Undo2 from "lucide-react-native/icons/undo-2"
 import { type ReactNode, useState } from "react"
 import { Text, XStack, YStack } from "tamagui"
 import { accountAtom } from "../../atoms/account.ts"
+import { Alert, AlertDescription } from "../../components/ui/alert.tsx"
 import { Button } from "../../components/ui/button.tsx"
 import {
   Card,
@@ -72,10 +79,7 @@ import {
   FieldSet,
 } from "../../components/ui/field.tsx"
 import { Input } from "../../components/ui/input.tsx"
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "../../components/ui/toggle-group.tsx"
+import { ToggleGroup } from "../../components/ui/toggle-group.tsx"
 import { useRequirePermission } from "../../core/use-access.ts"
 import { useEvoluQuery } from "../../hooks/use-evolu-query.ts"
 import { useRunToast } from "../../hooks/use-run-toast.ts"
@@ -122,10 +126,7 @@ function usePaymentRefundState({
   return {
     refunds,
     refundLines,
-    returnableOverpayment:
-      overpaymentInput === undefined
-        ? NonNegativeInteger(0)
-        : deriveReturnableOverpayment(overpaymentInput, payment.id),
+    overpaymentInput,
     ...deriveRefundAvailability({
       payment,
       excess,
@@ -188,7 +189,7 @@ function LoadedPaymentRefundDialog({
       billLabel={billLabel}
       currency={payment.currency}
       remainingAmount={state.remainingAmount}
-      returnableOverpayment={state.returnableOverpayment}
+      overpaymentInput={state.overpaymentInput}
       refundableLines={state.refundableLines}
       tipAmount={state.refundableTipAmount}
       defaultMethod={defaultMethod}
@@ -221,7 +222,7 @@ export function PaymentRefunds({
   const {
     refunds,
     refundLines,
-    returnableOverpayment,
+    overpaymentInput,
     refundableAmount,
     remainingAmount,
     refundableTipAmount,
@@ -272,6 +273,7 @@ export function PaymentRefunds({
               <RefundBadge
                 summary={{
                   refundedAmount: sumGoodsRefundAmounts(refunds),
+                  returnedOverpaymentAmount: sumReturnedOverpayment(refunds),
                   refundableAmount,
                   currency: payment.currency,
                 }}
@@ -305,6 +307,9 @@ export function PaymentRefunds({
                     {isTipRefund(refund)
                       ? `${t("paymentDetail.refunds.tip")} · `
                       : ""}
+                    {returnedOverpaymentOf(refund) > 0
+                      ? `${returnedOverpaymentLabel({ refund, t, format: money })} · `
+                      : ""}
                     {t(refundMethodLabelKey[refund.method])} ·{" "}
                     {formatDateTime(new Date(refund.refundedAt), locale)}
                   </Text>
@@ -334,7 +339,7 @@ export function PaymentRefunds({
           billLabel={null}
           currency={payment.currency}
           remainingAmount={remainingAmount}
-          returnableOverpayment={returnableOverpayment}
+          overpaymentInput={overpaymentInput}
           refundableLines={refundableLines}
           tipAmount={refundableTipAmount}
           defaultMethod={defaultMethod}
@@ -399,7 +404,7 @@ function RefundSheet({
   billLabel,
   currency,
   remainingAmount,
-  returnableOverpayment,
+  overpaymentInput,
   refundableLines,
   tipAmount,
   defaultMethod,
@@ -409,7 +414,7 @@ function RefundSheet({
   readonly billLabel: string | null
   readonly currency: FiatCurrency
   readonly remainingAmount: NonNegativeInteger
-  readonly returnableOverpayment: NonNegativeInteger
+  readonly overpaymentInput: BillOverpaymentInput | undefined
   readonly refundableLines: ReadonlyArray<RefundableLine<RefundablePaymentLine>>
   readonly tipAmount: NonNegativeInteger
   readonly defaultMethod: RefundMethod
@@ -423,11 +428,16 @@ function RefundSheet({
   const { device } = useAtomValue(accountAtom)
   const [mode, setMode] = useState<RefundMode>("amount")
   const [method, setMethod] = useState<RefundMethod>(defaultMethod)
+  const { returnableOverpayment, overpaidBy } = deriveRefundOverpayment(
+    overpaymentInput,
+    paymentId
+  )
   const asksPurpose = returnableOverpayment > 0 && mode === "amount"
   const [purpose, setPurpose] = useState<RefundPurpose>(
     returnableOverpayment > 0 ? "overpayment" : "goods"
   )
   const [typedAmountText, setTypedAmountText] = useState<string | null>(null)
+  const [amountLeft, setAmountLeft] = useState(false)
   const [quantities, setQuantities] = useState<RefundQuantities>({})
   const [pending, setPending] = useState(false)
   const amountText = deriveRefundAmountText({
@@ -447,6 +457,18 @@ function RefundSheet({
   })
   const money = (value: NonNegativeInteger) =>
     formatMoney({ value, currency }, locale)
+  const amountError =
+    amountLeft && typedAmount === null
+      ? t("refund.dialog.amount.invalid", { amount: money(remainingAmount) })
+      : undefined
+  const goodsPartOfReturn =
+    asksPurpose && purpose === "overpayment"
+      ? deriveGoodsPartOfReturn({
+          overpaymentInput,
+          paymentId,
+          amount: typedAmount,
+        })
+      : NonNegativeInteger(0)
 
   const confirm = async () => {
     if (refundAmount === null || pending) return
@@ -520,6 +542,15 @@ function RefundSheet({
         </>
       }
     >
+      {overpaidBy > 0 ? (
+        <Text
+          fontSize={fontSize.sm}
+          lineHeight={fontSize.sm}
+          fontWeight={fontWeight.semibold}
+        >
+          {t("overpayment.title", { amount: money(overpaidBy) })}
+        </Text>
+      ) : null}
       {tipAmount > 0 ? (
         <Text
           fontSize={fontSize.sm}
@@ -538,12 +569,12 @@ function RefundSheet({
           columns={2}
           disabled={pending}
         >
-          <ToggleGroupItem value="amount">
+          <ChoiceToggleItem value="amount" selected={mode === "amount"}>
             {t("refund.dialog.mode.amount")}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="items">
+          </ChoiceToggleItem>
+          <ChoiceToggleItem value="items" selected={mode === "items"}>
             {t("refund.dialog.mode.items")}
-          </ToggleGroupItem>
+          </ChoiceToggleItem>
         </ToggleGroup>
       ) : null}
 
@@ -581,16 +612,23 @@ function RefundSheet({
             keyboardType="decimal-pad"
             autoComplete="off"
             disabled={pending}
-            invalid={typedAmount === null}
-            onChangeText={setTypedAmountText}
+            invalid={amountError !== undefined}
+            onChangeText={(text) => {
+              setTypedAmountText(text)
+              setAmountLeft(false)
+            }}
+            onBlur={() => setAmountLeft(true)}
           />
-          <FieldError>
-            {typedAmount === null
-              ? t("refund.dialog.amount.invalid", {
-                  amount: money(remainingAmount),
-                })
-              : undefined}
-          </FieldError>
+          <FieldError>{amountError}</FieldError>
+          {goodsPartOfReturn > 0 ? (
+            <Alert variant="warning" icon={TriangleAlert}>
+              <AlertDescription>
+                {t("refund.dialog.goodsPart", {
+                  amount: money(goodsPartOfReturn),
+                })}
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </Field>
       ) : (
         <FieldSet>

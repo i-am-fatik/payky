@@ -231,23 +231,34 @@ export const resolvePaymentTitle = (
   return t("paymentHistory.payment")
 }
 
-/** "Partially refunded 3.00": the refund mark of a payment, `null` when nothing was refunded. */
-export const refundBadgeLabel = (
+/** "Partially refunded 3.00": the refund marks of a payment, none when nothing was refunded. */
+export const refundBadgeLabels = (
   summary: PaymentRefundSummary | undefined,
   t: Translate,
   locale: string
-): string | null => {
-  if (summary === undefined) return null
+): ReadonlyArray<string> => {
+  if (summary === undefined) return []
 
   const state = deriveRefundState(summary)
-  if (state === "none") return null
+  if (state === "none") return []
 
-  return t(refundStateLabelKey[state], {
-    amount: formatMoney(
-      { value: summary.refundedAmount, currency: summary.currency },
-      locale
-    ),
-  })
+  const format = (value: NonNegativeInteger) =>
+    formatMoney({ value, currency: summary.currency }, locale)
+  const goodsAmount = NonNegativeInteger(
+    Math.max(0, summary.refundedAmount - summary.returnedOverpaymentAmount)
+  )
+  return [
+    ...(summary.returnedOverpaymentAmount > 0
+      ? [
+          t("refund.state.overpayment", {
+            amount: format(summary.returnedOverpaymentAmount),
+          }),
+        ]
+      : []),
+    ...(goodsAmount > 0
+      ? [t(refundStateLabelKey[state], { amount: format(goodsAmount) })]
+      : []),
+  ]
 }
 
 export type BillHistoryRow = InferRow<ReturnType<typeof latestBillsQuery>>

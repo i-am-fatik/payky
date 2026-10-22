@@ -19,6 +19,7 @@ const refundColumns = [
   "refund.method",
   "refund.refundedAt",
   "refund.isTip",
+  "refund.overpaymentAmount",
 ] as const
 
 type RefundRequiredColumns = {
@@ -73,6 +74,7 @@ const selectRefundSummaries = (
       "refund.amount",
       "refund.currency",
       "refund.isTip",
+      "refund.overpaymentAmount",
       "payment.billId",
       "payment.amount as paymentAmount",
       "payment.tipAmount as paymentTipAmount",

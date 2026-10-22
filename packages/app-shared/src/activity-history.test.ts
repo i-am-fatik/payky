@@ -7,7 +7,7 @@ import {
   formatActivityDayTitle,
   hasAnyIssue,
   type PaymentHistoryRow,
-  refundBadgeLabel,
+  refundBadgeLabels,
   resolvePaymentTitle,
   summarizeBillHistoryRow,
   sumSettledTips,
@@ -259,21 +259,41 @@ describe("formatActivityDayTitle", () => {
   })
 })
 
-describe("refundBadgeLabel", () => {
-  const summary = (refundedAmount: number, refundableAmount: number) =>
-    ({ refundedAmount, refundableAmount, currency: "CZK" }) as never
+describe("refundBadgeLabels", () => {
+  const summary = (
+    refundedAmount: number,
+    refundableAmount: number,
+    returnedOverpaymentAmount = 0
+  ) =>
+    ({
+      refundedAmount,
+      returnedOverpaymentAmount,
+      refundableAmount,
+      currency: "USD",
+    }) as never
 
   test("is empty for no summary or nothing refunded", () => {
-    expect(refundBadgeLabel(undefined, t, "en-US")).toBeNull()
-    expect(refundBadgeLabel(summary(0, 100), t, "en-US")).toBeNull()
+    expect(refundBadgeLabels(undefined, t, "en-US")).toEqual([])
+    expect(refundBadgeLabels(summary(0, 100), t, "en-US")).toEqual([])
   })
 
   test("names a partial and a full refund differently", () => {
-    const partial = refundBadgeLabel(summary(50, 100), t, "en-US")
-    const full = refundBadgeLabel(summary(100, 100), t, "en-US")
-    expect(partial).not.toBeNull()
-    expect(full).not.toBeNull()
-    expect(partial).not.toBe(full)
+    expect(refundBadgeLabels(summary(50, 100), t, "en-US")).toEqual([
+      "Partly refunded $0.50",
+    ])
+    expect(refundBadgeLabels(summary(100, 100), t, "en-US")).toEqual([
+      "Refunded $1.00",
+    ])
+  })
+
+  test("reads a returned overpayment as one, apart from the goods (refund/0008)", () => {
+    expect(refundBadgeLabels(summary(400, 1000, 400), t, "en-US")).toEqual([
+      "Returned overpayment $4.00",
+    ])
+    expect(refundBadgeLabels(summary(700, 1000, 500), t, "en-US")).toEqual([
+      "Returned overpayment $5.00",
+      "Partly refunded $2.00",
+    ])
   })
 })
 

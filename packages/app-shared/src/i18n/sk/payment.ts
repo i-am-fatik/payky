@@ -61,6 +61,9 @@ export const skPayment = {
   "paymentDetail.refunds.title": "Vrátenia",
   "paymentDetail.refunds.tipAction": "Vrátiť sprepitné ({amount})",
   "paymentDetail.refunds.tip": "Sprepitné",
+  "paymentDetail.refunds.overpayment": "Vrátený preplatok",
+  "paymentDetail.refunds.overpaymentIncluded":
+    "Z toho vrátený preplatok {amount}",
   "paymentDetail.tipIncluded": "Z toho tringelt {amount}",
   "paymentDetail.overpaymentTip": "Prepitné z preplatku {amount}",
   "paymentDetail.canceledAtValue": "Zrušené {date}",
@@ -297,6 +300,7 @@ export const skPayment = {
   "refund.dialog.cancel": "Zrušiť",
   "refund.dialog.confirm": "Vrátiť {amount}",
   "refund.dialog.confirmEmpty": "Vrátiť",
+  "refund.dialog.goodsPart": "Z toho {amount} sa vracia za tovar.",
   "refund.dialog.description":
     "Vrátenie sa nedá vziať späť. Platba zostane zaplatená a účet uzavretý.",
   "refund.dialog.items.available": "Najviac {quantity}",
@@ -317,6 +321,7 @@ export const skPayment = {
   "refund.error.notPaid": "Vrátiť sa dá iba zaplatená platba.",
   "refund.state.full": "Vrátené {amount}",
   "refund.state.partial": "Čiastočne vrátené {amount}",
+  "refund.state.overpayment": "Vrátený preplatok {amount}",
   "refund.dialog.purpose.label": "Za čo sa peniaze vracajú",
   "refund.dialog.purpose.overpayment": "Vracia peniaze zaplatené navyše",
   "refund.dialog.purpose.goods": "Vracia peniaze za tovar",

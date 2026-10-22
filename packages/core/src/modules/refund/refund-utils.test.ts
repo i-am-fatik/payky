@@ -188,12 +188,21 @@ describe("summarizeRefundsByPayment", () => {
     {
       isTip = null,
       tipAmount = 0,
-    }: { readonly isTip?: 1 | null; readonly tipAmount?: number } = {}
+      returnedOverpayment = null,
+    }: {
+      readonly isTip?: 1 | null
+      readonly tipAmount?: number
+      readonly returnedOverpayment?: number | null
+    } = {}
   ) => ({
     paymentId,
     amount: NonNegativeInteger(amount),
     currency: "CZK" as const,
     isTip,
+    overpaymentAmount:
+      returnedOverpayment === null
+        ? null
+        : NonNegativeInteger(returnedOverpayment),
     paymentAmount: NonNegativeInteger(25_000),
     paymentTipAmount: NonNegativeInteger(tipAmount),
     paymentCurrency: "CZK" as const,
@@ -213,6 +222,7 @@ describe("summarizeRefundsByPayment", () => {
 
     expect(summary).toEqual({
       refundedAmount: 25_000,
+      returnedOverpaymentAmount: 0,
       refundableAmount: 50_000,
       currency: "CZK",
     })
@@ -246,6 +256,18 @@ describe("summarizeRefundsByPayment", () => {
     expect(goodsOnly === undefined ? null : deriveRefundState(goodsOnly)).toBe(
       "full"
     )
+  })
+
+  test("reads what a return gave back of the overpayment apart from goods", () => {
+    const summary = summarizeRefundsByPayment([
+      refundOf(7_000, [25_000, 25_000], { returnedOverpayment: 5_000 }),
+      refundOf(1_000, [25_000, 25_000]),
+    ]).get(paymentId)
+
+    expect(summary).toMatchObject({
+      refundedAmount: 8_000,
+      returnedOverpaymentAmount: 5_000,
+    })
   })
 
   test("reads a payment settled once and refunded in full as full", () => {
