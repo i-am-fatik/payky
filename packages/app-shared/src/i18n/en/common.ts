@@ -170,6 +170,7 @@ export const enCommon = {
   "stats.top.title": "Top sellers",
   "tables.seatCount": "{value} seats",
   "tables.tile.billNumber": "#{number}",
+  "tables.tile.billWithState": "{label}, {state}",
   "tables.tile.free": "Free",
   "tables.tile.itemCount": "{value} pcs",
   "tables.tile.multipleBills": "{value} open bills",

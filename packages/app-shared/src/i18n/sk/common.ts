@@ -172,6 +172,7 @@ export const skCommon = {
   "stats.top.title": "Najpredávanejšie",
   "tables.seatCount": "{value} miest",
   "tables.tile.billNumber": "#{number}",
+  "tables.tile.billWithState": "{label}, {state}",
   "tables.tile.free": "Voľný",
   "tables.tile.itemCount": "{value} ks",
   "tables.tile.multipleBills": "{value} otvorených účtov",

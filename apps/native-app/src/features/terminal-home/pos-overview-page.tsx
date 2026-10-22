@@ -2,6 +2,7 @@ import { formatElapsed } from "@payky/app-shared/format-elapsed"
 import { formatMoney } from "@payky/app-shared/format-money"
 import type { TranslationKey } from "@payky/app-shared/i18n/resources"
 import {
+  type BillPaymentState,
   type BillWithStats,
   billPaymentState,
   buildBillRows,
@@ -21,6 +22,9 @@ import { tablesQuery } from "@payky/core/modules/table/table-queries"
 import type { TableId } from "@payky/core/modules/table/table-types"
 import { router, useFocusEffect } from "expo-router"
 import { useAtom } from "jotai"
+import type { LucideIcon } from "lucide-react-native"
+import ChartPie from "lucide-react-native/icons/chart-pie"
+import Hourglass from "lucide-react-native/icons/hourglass"
 import Plus from "lucide-react-native/icons/plus"
 import Users from "lucide-react-native/icons/users"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -51,6 +55,11 @@ const elapsedColors = {
   long: "warning",
   veryLong: "destructive",
 } as const satisfies Record<ReturnType<typeof elapsedSeverity>, string>
+
+const billPaymentStateIcons = {
+  paymentPending: Hourglass,
+  partiallyPaid: ChartPie,
+} satisfies Record<BillPaymentState, LucideIcon>
 
 type TFn = ReturnType<typeof useTranslation>["t"]
 
@@ -412,17 +421,7 @@ function TableTile({
               {t("tables.tile.itemCount", { value: itemCount })}
             </Text>
             {paymentState !== undefined && (
-              <Text
-                rounded={radius.sm}
-                bg="info-15"
-                px={4}
-                fontSize={fontSize.xs}
-                lineHeight={fontSize.xs}
-                fontWeight={fontWeight.semibold}
-                color="info"
-              >
-                {t(`tables.tile.${paymentState}`)}
-              </Text>
+              <BillPaymentStateBadge paymentState={paymentState} />
             )}
           </XStack>
         ) : (
@@ -486,9 +485,34 @@ function TableTile({
   )
 }
 
+function BillPaymentStateBadge({
+  paymentState,
+}: {
+  readonly paymentState: BillPaymentState
+}) {
+  const { t } = useTranslation()
+  return (
+    <XStack items="center" gap={4} rounded={radius.sm} bg="info-15" px={4}>
+      <Icon
+        icon={billPaymentStateIcons[paymentState]}
+        size={14}
+        color="info-foreground"
+      />
+      <Text
+        fontSize={fontSize.xs}
+        lineHeight={fontSize.xs}
+        fontWeight={fontWeight.semibold}
+        color="info-foreground"
+      >
+        {t(`tables.tile.${paymentState}`)}
+      </Text>
+    </XStack>
+  )
+}
+
 /**
  * One open bill as a chip: its total and, off a table, how long it has been
- * open, a dot while its payment is under way, and its label when it has one.
+ * open, and its label when it has one.
  */
 function BillChip({
   bill,
@@ -507,7 +531,14 @@ function BillChip({
   return (
     <Pressable
       role="button"
-      aria-label={billLabel(bill, t)}
+      aria-label={
+        paymentState === undefined
+          ? billLabel(bill, t)
+          : t("tables.tile.billWithState", {
+              label: billLabel(bill, t),
+              state: t(`tables.tile.${paymentState}`),
+            })
+      }
       onPress={() => openBill(bill.id)}
       style={{ minHeight: 44, justifyContent: "center" }}
     >
@@ -522,7 +553,7 @@ function BillChip({
         bg="background-70"
       >
         {paymentState !== undefined && (
-          <YStack w={8} h={8} rounded={radius.full} bg="info" />
+          <Icon icon={billPaymentStateIcons[paymentState]} color="info" />
         )}
         {bill.label !== null && (
           <Text

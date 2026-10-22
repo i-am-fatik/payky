@@ -2,6 +2,7 @@ import { useTimestamp } from "@dedalik/use-react"
 import { formatElapsed } from "@payky/app-shared/format-elapsed"
 import type { TranslationKey } from "@payky/app-shared/i18n/resources"
 import {
+  type BillPaymentState,
   type BillWithStats,
   billPaymentState,
   buildBillRows,
@@ -23,7 +24,13 @@ import { tablesQuery } from "@payky/core/modules/table/table-queries"
 import type { TableId } from "@payky/core/modules/table/table-types"
 import { useLocalStorageState } from "@payky/web-shared/use-local-storage-state"
 import { Link } from "@tanstack/react-router"
-import { PlusIcon, UsersIcon } from "lucide-react"
+import {
+  ChartPieIcon,
+  HourglassIcon,
+  type LucideIcon,
+  PlusIcon,
+  UsersIcon,
+} from "lucide-react"
 import { type ReactNode, useMemo, useState } from "react"
 import { buttonVariants } from "@/components/ui/button.tsx"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.tsx"
@@ -188,6 +195,11 @@ const formatRowsTotal = (
   return total === undefined ? undefined : formatMoney(total, locale)
 }
 
+const billPaymentStateIcons = {
+  paymentPending: HourglassIcon,
+  partiallyPaid: ChartPieIcon,
+} satisfies Record<BillPaymentState, LucideIcon>
+
 /** Covers the whole tile, so its most likely next step needs no aiming. */
 const stretchedLinkClassName =
   "absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -310,9 +322,7 @@ function TableTile({
                 </span>
                 <span>{t("tables.tile.itemCount", { value: itemCount })}</span>
                 {paymentState !== undefined && (
-                  <span className="rounded-sm bg-info/15 px-1 text-xs font-semibold text-info">
-                    {t(`tables.tile.${paymentState}`)}
-                  </span>
+                  <BillPaymentStateBadge paymentState={paymentState} />
                 )}
               </>
             ) : (
@@ -346,6 +356,22 @@ function TableTile({
         />
       )}
     </div>
+  )
+}
+
+function BillPaymentStateBadge({
+  paymentState,
+}: {
+  readonly paymentState: BillPaymentState
+}) {
+  const { t } = useTranslation()
+  const Icon = billPaymentStateIcons[paymentState]
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm bg-info/15 px-1 text-xs font-semibold text-info-foreground">
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      {t(`tables.tile.${paymentState}`)}
+    </span>
   )
 }
 
@@ -384,8 +410,7 @@ const billLabel = (
 
 /**
  * One open bill as a chip, where a table holds several or the bill is on
- * no table: its total and, off a table, how long it has been open, a dot while its
- * payment is under way, and its label when it has one.
+ * no table: its total and, off a table, how long it has been open, and its label when it has one.
  */
 function BillChip({
   bill,
@@ -401,20 +426,25 @@ function BillChip({
   const locale = useLocale()
   const elapsedMs = now - new Date(bill.createdAt).getTime()
   const paymentState = billPaymentState(bill, now)
+  const PaymentStateIcon =
+    paymentState === undefined ? undefined : billPaymentStateIcons[paymentState]
 
   return (
     <Link
       to="/bill"
       search={{ billId: bill.id }}
-      aria-label={billLabel(bill, t)}
+      aria-label={
+        paymentState === undefined
+          ? billLabel(bill, t)
+          : t("tables.tile.billWithState", {
+              label: billLabel(bill, t),
+              state: t(`tables.tile.${paymentState}`),
+            })
+      }
       className="relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-background/70 px-2.5 text-sm ring-1 ring-foreground/10 ring-inset transition-colors hover:bg-background"
     >
-      {paymentState !== undefined && (
-        <span
-          aria-hidden
-          title={t(`tables.tile.${paymentState}`)}
-          className="size-2 rounded-full bg-info"
-        />
+      {PaymentStateIcon !== undefined && (
+        <PaymentStateIcon aria-hidden className="size-4 shrink-0 text-info" />
       )}
       {bill.label !== null && (
         <span className="max-w-24 truncate text-muted-foreground">

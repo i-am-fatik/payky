@@ -91,11 +91,13 @@ export const sumBillRows = (
   }
 }
 
+export type BillPaymentState = "paymentPending" | "partiallyPaid"
+
 /** Where a bill's payment stands, when it is anywhere at all. */
 export const billPaymentState = (
   bill: OpenBillRow,
   now: number
-): "paymentPending" | "partiallyPaid" | undefined => {
+): BillPaymentState | undefined => {
   if (
     derivePendingPaymentIds(
       bill.payments,
@@ -113,7 +115,7 @@ export const billPaymentState = (
 export const tablePaymentState = (
   rows: ReadonlyArray<BillWithStats>,
   now: number
-): "paymentPending" | "partiallyPaid" | undefined => {
+): BillPaymentState | undefined => {
   const states = rows.map(({ bill }) => billPaymentState(bill, now))
   return states.includes("paymentPending")
     ? "paymentPending"

@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test"
 import { addCatalogItem, addTable } from "./support/bill.ts"
 import { expect, screenshotDir, test } from "./support/fixtures.ts"
 import { nameParam, translate, translateParams } from "./support/i18n.ts"
@@ -12,6 +13,7 @@ import {
   overpaymentCard,
 } from "./support/overpayment.ts"
 import {
+  openTableBill,
   payAllOfTheBeer,
   routeFakeNostrRelays,
   seedPizzaAndBeerBill,
@@ -333,3 +335,93 @@ test("a self-paid bill whose lines staff remove leaves the overview and its over
     })
   })
 })
+
+test("a partly paid table states it in text at AA contrast, and its bill's chip is read with it", async ({
+  seededPage: page,
+  context,
+}) => {
+  test.setTimeout(120_000)
+  await routeFakeNostrRelays(context)
+  const { guestAddress } = await seedPizzaAndBeerBill(page, "Table 13")
+  const tableTile = page
+    .getByTestId("table-tile")
+    .filter({ hasText: "Table 13" })
+  const partlyPaid = translate("en", "tables.tile.partiallyPaid")
+
+  await test.step("a guest pays the beer and staff open a second bill on the table", async () => {
+    const guest = await context.newPage()
+    await guest.goto(guestAddress)
+    await payAllOfTheBeer(page, guest)
+    await guest.close()
+    await openTableBill(page, "en", { table: "Table 13", items: ["Pizza"] })
+  })
+
+  await test.step("the partly paid bill's chip is read with its state, the other without", async () => {
+    await gotoPosOverview(page, "en")
+    await expect(
+      tableTile.getByRole("link", {
+        name: new RegExp(`^Bill #\\d+, ${partlyPaid}$`, "u"),
+      })
+    ).toHaveCount(1, { timeout: 30_000 })
+    await expect(
+      tableTile.getByRole("link", { name: /^Bill #\d+$/u })
+    ).toHaveCount(1)
+  })
+
+  await test.step("the table's state text reaches 4.5:1 in light and dark mode", async () => {
+    const state = tableTile.getByText(partlyPaid, { exact: true })
+    expect(await textContrast(state)).toBeGreaterThanOrEqual(4.5)
+    await page.emulateMedia({ colorScheme: "dark" })
+    await expect(page.locator("html")).toHaveClass(/\bdark\b/u)
+    expect(await textContrast(state)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+const textContrast = (text: Locator): Promise<number> =>
+  text.evaluate((element) => {
+    const canvas = document.createElement("canvas")
+    canvas.width = 1
+    canvas.height = 1
+    const context = canvas.getContext("2d", { willReadFrequently: true })
+    if (context === null) {
+      throw new Error("Measuring contrast needs a 2D canvas.")
+    }
+    const rgba = (color: string) => {
+      context.clearRect(0, 0, 1, 1)
+      context.fillStyle = color
+      context.fillRect(0, 0, 1, 1)
+      const [r = 0, g = 0, b = 0, a = 0] = context.getImageData(0, 0, 1, 1).data
+      return { r, g, b, a: a / 255 }
+    }
+    const layers: Array<ReturnType<typeof rgba>> = []
+    for (
+      let node: Element | null = element;
+      node !== null;
+      node = node.parentElement
+    ) {
+      layers.unshift(rgba(getComputedStyle(node).backgroundColor))
+    }
+    const background = layers.reduce(
+      (under, over) => ({
+        r: over.r * over.a + under.r * (1 - over.a),
+        g: over.g * over.a + under.g * (1 - over.a),
+        b: over.b * over.a + under.b * (1 - over.a),
+        a: 1,
+      }),
+      { r: 255, g: 255, b: 255, a: 1 }
+    )
+    const luminance = ({ r, g, b }: ReturnType<typeof rgba>) => {
+      const linear = (channel: number) => {
+        const value = channel / 255
+        return value <= 0.04045
+          ? value / 12.92
+          : ((value + 0.055) / 1.055) ** 2.4
+      }
+      return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    }
+    const [lighter = 0, darker = 0] = [
+      luminance(rgba(getComputedStyle(element).color)),
+      luminance(background),
+    ].sort((first, second) => second - first)
+    return (lighter + 0.05) / (darker + 0.05)
+  })

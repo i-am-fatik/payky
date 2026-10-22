@@ -171,6 +171,7 @@ export const csCommon = {
   "stats.top.title": "Nejprodávanější",
   "tables.seatCount": "{value} míst",
   "tables.tile.billNumber": "#{number}",
+  "tables.tile.billWithState": "{label}, {state}",
   "tables.tile.free": "Volný",
   "tables.tile.itemCount": "{value} ks",
   "tables.tile.multipleBills": "{value} otevřených účtů",
