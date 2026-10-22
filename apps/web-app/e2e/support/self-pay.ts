@@ -216,6 +216,23 @@ export async function seedMenu(
   }, menu)
 }
 
+export async function receiveMenuOrder(
+  page: Page,
+  order: {
+    readonly table: string
+    readonly items: ReadonlyArray<{
+      readonly name: string
+      readonly quantity: number
+    }>
+    readonly note?: string
+    readonly amount: number
+  }
+): Promise<void> {
+  await page.evaluate(async (value) => {
+    await window.__e2eReceiveMenuOrder?.(value)
+  }, order)
+}
+
 export async function receiveShownBankTransfer(
   page: Page,
   {

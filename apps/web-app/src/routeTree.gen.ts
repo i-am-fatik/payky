@@ -16,6 +16,7 @@ import { Route as RestoreAccountRouteImport } from './routes/restore-account'
 import { Route as TerminalIndexRouteImport } from './routes/_terminal.index'
 import { Route as TerminalActivityRouteImport } from './routes/_terminal.activity'
 import { Route as TerminalBillRouteImport } from './routes/_terminal.bill'
+import { Route as TerminalOrdersRouteImport } from './routes/_terminal.orders'
 import { Route as TerminalSettingsRouteImport } from './routes/_terminal.settings'
 import { Route as TerminalStatsRouteImport } from './routes/_terminal.stats'
 import { Route as TerminalActivityPaymentIdRouteImport } from './routes/_terminal.activity_.$paymentId'
@@ -117,6 +118,11 @@ const TerminalActivityRoute = TerminalActivityRouteImport.update({
 const TerminalBillRoute = TerminalBillRouteImport.update({
   id: '/bill',
   path: '/bill',
+  getParentRoute: () => TerminalRoute,
+} as any)
+const TerminalOrdersRoute = TerminalOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
   getParentRoute: () => TerminalRoute,
 } as any)
 const TerminalSettingsRoute = TerminalSettingsRouteImport.update({
@@ -527,6 +533,7 @@ export interface FileRoutesByFullPath {
   '/restore-account': typeof RestoreAccountRoute
   '/activity': typeof TerminalActivityRoute
   '/bill': typeof TerminalBillRoute
+  '/orders': typeof TerminalOrdersRoute
   '/settings': typeof TerminalSettingsRouteWithChildren
   '/stats': typeof TerminalStatsRoute
   '/activity/$paymentId': typeof TerminalActivityPaymentIdRoute
@@ -602,6 +609,7 @@ export interface FileRoutesByTo {
   '/restore-account': typeof RestoreAccountRoute
   '/activity': typeof TerminalActivityRoute
   '/bill': typeof TerminalBillRoute
+  '/orders': typeof TerminalOrdersRoute
   '/stats': typeof TerminalStatsRoute
   '/': typeof TerminalIndexRoute
   '/activity/$paymentId': typeof TerminalActivityPaymentIdRoute
@@ -667,6 +675,7 @@ export interface FileRoutesById {
   '/restore-account': typeof RestoreAccountRoute
   '/_terminal/activity': typeof TerminalActivityRoute
   '/_terminal/bill': typeof TerminalBillRoute
+  '/_terminal/orders': typeof TerminalOrdersRoute
   '/_terminal/settings': typeof TerminalSettingsRouteWithChildren
   '/_terminal/stats': typeof TerminalStatsRoute
   '/_terminal/': typeof TerminalIndexRoute
@@ -746,6 +755,7 @@ export interface FileRouteTypes {
     | '/restore-account'
     | '/activity'
     | '/bill'
+    | '/orders'
     | '/settings'
     | '/stats'
     | '/activity/$paymentId'
@@ -821,6 +831,7 @@ export interface FileRouteTypes {
     | '/restore-account'
     | '/activity'
     | '/bill'
+    | '/orders'
     | '/stats'
     | '/'
     | '/activity/$paymentId'
@@ -885,6 +896,7 @@ export interface FileRouteTypes {
     | '/restore-account'
     | '/_terminal/activity'
     | '/_terminal/bill'
+    | '/_terminal/orders'
     | '/_terminal/settings'
     | '/_terminal/stats'
     | '/_terminal/'
@@ -1012,6 +1024,13 @@ declare module '@tanstack/react-router' {
       path: '/bill'
       fullPath: '/bill'
       preLoaderRoute: typeof TerminalBillRouteImport
+      parentRoute: typeof TerminalRoute
+    }
+    '/_terminal/orders': {
+      id: '/_terminal/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof TerminalOrdersRouteImport
       parentRoute: typeof TerminalRoute
     }
     '/_terminal/settings': {
@@ -1795,6 +1814,7 @@ const TerminalSettingsRouteWithChildren =
 interface TerminalRouteChildren {
   TerminalActivityRoute: typeof TerminalActivityRoute
   TerminalBillRoute: typeof TerminalBillRoute
+  TerminalOrdersRoute: typeof TerminalOrdersRoute
   TerminalSettingsRoute: typeof TerminalSettingsRouteWithChildren
   TerminalStatsRoute: typeof TerminalStatsRoute
   TerminalIndexRoute: typeof TerminalIndexRoute
@@ -1808,6 +1828,7 @@ interface TerminalRouteChildren {
 const TerminalRouteChildren: TerminalRouteChildren = {
   TerminalActivityRoute: TerminalActivityRoute,
   TerminalBillRoute: TerminalBillRoute,
+  TerminalOrdersRoute: TerminalOrdersRoute,
   TerminalSettingsRoute: TerminalSettingsRouteWithChildren,
   TerminalStatsRoute: TerminalStatsRoute,
   TerminalIndexRoute: TerminalIndexRoute,

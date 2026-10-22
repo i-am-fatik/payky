@@ -84,6 +84,11 @@ export const uiParityMap: ReadonlyArray<UiParityEntry> = [
     status: "matched",
   },
   {
+    native: "src/components/app/menu-order-announcer.tsx",
+    web: ["apps/web-app/src/components/app/menu-order-announcer.tsx"],
+    status: "matched",
+  },
+  {
     native: "src/components/app/pin-prompt-host.tsx",
     web: ["apps/web-app/src/components/app/pin-prompt-host.tsx"],
     status: "matched",
@@ -477,6 +482,11 @@ export const uiParityMap: ReadonlyArray<UiParityEntry> = [
       TransportToggleList:
         "native restore sync only reports relay status; toggling transports remains in settings",
     },
+  },
+  {
+    native: "src/features/orders/orders-to-serve-page.tsx",
+    web: ["apps/web-app/src/features/orders/orders-to-serve-page.tsx"],
+    status: "matched",
   },
   {
     native: "src/features/payment-tip/payment-tip-page.tsx",

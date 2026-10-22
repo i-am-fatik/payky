@@ -14,6 +14,7 @@ import { z } from "zod"
 import type { DateDep, EvoluOwnerDep } from "../../deps.ts"
 import { jsonCodec } from "../../zod-utils.ts"
 import { unclaimedIncomingTransactionsSinceQuery } from "../account-transaction/account-transaction-queries.ts"
+import type { AccountTransactionId } from "../account-transaction/account-transaction-types.ts"
 import { settingsQuery } from "../app-settings/app-settings-queries.ts"
 import { getFiatCurrency } from "../app-settings/app-settings-utils.ts"
 import {
@@ -24,6 +25,7 @@ import { loadBillCoverage } from "../bill/bill-guards.ts"
 import type { BillId } from "../bill/bill-types.ts"
 import type { BillLineRow } from "../bill-line/bill-line.ts"
 import { loadCalculatedBillLineSummaries } from "../bill-line/bill-line-actions.ts"
+import type { BillLineSummaryId } from "../bill-line/bill-line-types.ts"
 import { createBillLineSummaryId } from "../bill-line/bill-line-utils.ts"
 import { catalogCategoriesQuery } from "../catalog-category/catalog-category-queries.ts"
 import { catalogItemsQuery } from "../catalog-item/catalog-item-queries.ts"
@@ -34,7 +36,9 @@ import type { EvoluDep } from "../shared/evolu-deps.ts"
 import { runMutationWithCompletion } from "../shared/evolu-utils.ts"
 import { deriveTableSelfPayKeys } from "../shared/key-derivation.ts"
 import {
+  type Currency,
   DateStringSchema,
+  type Integer,
   NonEmptyString255,
   NonEmptyStringSchema,
   NonNegativeInteger,
@@ -337,6 +341,7 @@ export interface MenuOrderToServe {
   readonly note: string | null
   readonly isFullyPaid: boolean
   readonly lines: ReadonlyArray<{
+    readonly id: BillLineSummaryId
     readonly name: string
     readonly quantity: number
     readonly isSoldOut: boolean
@@ -377,6 +382,7 @@ export const loadMenuOrdersToServe =
                   ? undefined
                   : catalogById.get(summary.catalogItemId)
               return {
+                id: summary.id,
                 name:
                   catalogItem === undefined
                     ? summary.name
@@ -393,9 +399,10 @@ export const loadMenuOrdersToServe =
   }
 
 export interface MenuOrderNotFoundYet {
-  readonly amount: number
-  readonly currency: string
-  readonly occurredAt: number
+  readonly id: AccountTransactionId
+  readonly amount: Integer
+  readonly currency: Currency
+  readonly occurredAt: TimestampMs
 }
 
 export const loadMenuOrdersNotFoundYet =
@@ -420,6 +427,7 @@ export const loadMenuOrdersNotFoundYet =
           row.occurredAt !== null
           ? [
               {
+                id: row.id,
                 amount: row.amount,
                 currency: row.currency,
                 occurredAt: row.occurredAt,

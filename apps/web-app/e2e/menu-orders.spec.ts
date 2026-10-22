@@ -2,10 +2,12 @@ import { addCatalogItem, addTable } from "./support/bill.ts"
 import { expect, test } from "./support/fixtures.ts"
 import { translate, translateParams } from "./support/i18n.ts"
 import { toggleInlineSwitch } from "./support/inline-edit.ts"
-import { gotoPage, reloadPage } from "./support/navigation.ts"
+import { gotoPage, gotoPosOverview, reloadPage } from "./support/navigation.ts"
 import {
   enableTableSelfPay,
+  receiveMenuOrder,
   routeFakeNostrRelays,
+  seedActiveFioPlugin,
   seedMenu,
 } from "./support/self-pay.ts"
 
@@ -139,5 +141,105 @@ test("ordering is switched on with nothing in the menu, on this device", async (
     await reloadPage(page, "en", "settings.tables.title")
     await expect(payBill).not.toBeChecked()
     await expect(order).toBeChecked()
+  })
+})
+
+test("a paid order is announced, listed to serve and served", async ({
+  seededPage: page,
+  context,
+}) => {
+  test.setTimeout(120_000)
+  await routeFakeNostrRelays(context)
+  const orderCard = page.getByTestId("order-to-serve")
+  const nothingToServe = page.getByText(translate("en", "orders.empty"))
+
+  await test.step("seed a table with self-pay and a menu", async () => {
+    await seedActiveFioPlugin(page)
+    await addTable(page, "en", { name: "Table 3", seatCount: "4" })
+    await enableTableSelfPay(page, "en", "Table 3")
+    await seedMenu(page, {
+      items: [
+        { name: "Svíčková na smetaně", internalName: "SVÍČK", amount: 21900 },
+        { name: "Coffee", amount: 6500 },
+      ],
+    })
+  })
+
+  await test.step("open To serve from the floor", async () => {
+    await gotoPosOverview(page, "en")
+    await page
+      .getByRole("link", { name: new RegExp(translate("en", "nav.orders")) })
+      .click()
+    await page
+      .getByRole("heading", { name: translate("en", "orders.title") })
+      .waitFor()
+    await expect(nothingToServe).toBeVisible()
+  })
+
+  await test.step("a guest pays an order with a note", () =>
+    receiveMenuOrder(page, {
+      table: "Table 3",
+      items: [
+        { name: "Svíčková na smetaně", quantity: 1 },
+        { name: "Coffee", quantity: 2 },
+      ],
+      note: "bez cukru",
+      amount: 35000,
+    }))
+
+  await test.step("the till announces it", async () => {
+    await expect(
+      page.getByText(
+        translateParams("en", "orders.announced", {
+          number: 1,
+          table: "Table 3",
+        })
+      )
+    ).toBeVisible()
+  })
+
+  await test.step("To serve shows it by internal names, with the note", async () => {
+    await expect(orderCard).toHaveCount(1)
+    await expect(orderCard).toContainText(
+      translateParams("en", "orders.number", { number: 1 })
+    )
+    await expect(orderCard).toContainText("Table 3")
+    await expect(orderCard).toContainText(
+      translateParams("en", "orders.line", { name: "SVÍČK", quantity: 1 })
+    )
+    await expect(orderCard).toContainText(
+      translateParams("en", "orders.line", { name: "Coffee", quantity: 2 })
+    )
+    await expect(orderCard).not.toContainText("Svíčková na smetaně")
+    await expect(orderCard).toContainText(
+      translateParams("en", "orders.note", { note: "bez cukru" })
+    )
+    await expect(orderCard).toContainText(translate("en", "orders.paid"))
+    await expect(orderCard).not.toContainText(
+      translate("en", "orders.notFullyPaid")
+    )
+  })
+
+  await test.step("Served takes it off the list", async () => {
+    await orderCard
+      .getByRole("button", { name: translate("en", "orders.served") })
+      .click()
+    await expect(orderCard).toHaveCount(0)
+    await expect(nothingToServe).toBeVisible()
+  })
+
+  await test.step("an order paid in part says so", async () => {
+    await receiveMenuOrder(page, {
+      table: "Table 3",
+      items: [{ name: "Coffee", quantity: 1 }],
+      amount: 3000,
+    })
+    await expect(orderCard).toHaveCount(1)
+    await expect(orderCard).toContainText(
+      translateParams("en", "orders.number", { number: 2 })
+    )
+    await expect(orderCard).toContainText(
+      translate("en", "orders.notFullyPaid")
+    )
   })
 })

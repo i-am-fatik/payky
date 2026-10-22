@@ -206,6 +206,10 @@ assertions.
 - Menu (web's `__e2eSeedMenu`): `seedMenu` (`items=name:amount[:internalName],...`,
   `billsHidden`) switches ordering on with this device taking orders and
   puts the items in the menu.
+  `receiveMenuOrder` (`table`, `items=name:quantity,...`, `note`, `amount`)
+  is web's `__e2eReceiveMenuOrder`: it publishes the order to the self-pay
+  relays (the mock relay) and receives the bank transfer naming it, as the
+  order device's FIO sync would.
 
 ## Selectors
 
@@ -218,6 +222,8 @@ assertions.
    is already mirrored (native-e2e.md, 3.3). On web `id:` reads an element's
    aria-label before its testID, so a testID only works there on an element
    without a label (`table-tile` sits on the unlabeled wrapper, as on web).
+   A kit component's Tamagui `name` (Card, Badge) hides its testID the same
+   way, so `order-to-serve` sits on an unnamed wrapper.
 
 4. Inputs: `tap-input`/`fill-input`. A kit input's field label is also its
    aria-label and testID, so `id: <label>` finds it on both platforms (a text

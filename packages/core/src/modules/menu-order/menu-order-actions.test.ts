@@ -569,8 +569,12 @@ describe("what staff serve", () => {
     })
     expect(toServe.lines).toEqual(
       expect.arrayContaining([
-        { name: "KAFE", quantity: 2, isSoldOut: false },
-        { name: "Cake", quantity: 1, isSoldOut: true },
+        expect.objectContaining({
+          name: "KAFE",
+          quantity: 2,
+          isSoldOut: false,
+        }),
+        expect.objectContaining({ name: "Cake", quantity: 1, isSoldOut: true }),
       ])
     )
     expect(await run.ok(loadMenuOrdersToServe())).toEqual([])
