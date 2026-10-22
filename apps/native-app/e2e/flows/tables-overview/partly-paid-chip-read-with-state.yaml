@@ -60,5 +60,5 @@ tags: [tables-overview]
       LABEL: '${output.tv("bill.list.label", { number: 1 })}'
       HIDDEN: "true"
 - assertVisible:
-    text: ${output.t["tables.tile.partiallyPaid"]}
+    text: '${output.re(output.tv("tables.tile.partiallyPaidAmount", { amount: "\u002445.00" }))}'
     below: Table 13

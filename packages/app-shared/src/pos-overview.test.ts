@@ -1,6 +1,9 @@
+import { NonNegativeInteger } from "@payky/core/modules/shared/schema"
 import { describe, expect, test } from "vitest"
 import {
+  type BillWithStats,
   elapsedSeverity,
+  formatRowsSum,
   matchesTableFilter,
   sumBillRows,
 } from "./pos-overview.ts"
@@ -26,5 +29,27 @@ describe("matchesTableFilter", () => {
 describe("sumBillRows", () => {
   test("has no sum without rows", () => {
     expect(sumBillRows([])).toBeUndefined()
+  })
+})
+
+describe("formatRowsSum", () => {
+  const row = (paid: number, left: number, currency = "EUR") =>
+    ({
+      bill: { currency },
+      paid: NonNegativeInteger(paid),
+      left: NonNegativeInteger(left),
+    }) as unknown as BillWithStats
+
+  test("sums what is left on the rows, or what guests paid on them", () => {
+    const rows = [row(4500, 10100), row(0, 500)]
+
+    expect(formatRowsSum(rows, "left", "en-US")).toBe("€106.00")
+    expect(formatRowsSum(rows, "paid", "en-US")).toBe("€45.00")
+  })
+
+  test("has no sum across currencies", () => {
+    expect(
+      formatRowsSum([row(0, 100), row(0, 100, "CZK")], "left", "en-US")
+    ).toBeUndefined()
   })
 })

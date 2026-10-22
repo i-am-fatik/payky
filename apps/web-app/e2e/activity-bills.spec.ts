@@ -13,6 +13,7 @@ import {
   simulateDuplicateSettlement,
   startCollisionBill,
 } from "./support/collisions.ts"
+import { colorContrast } from "./support/color-contrast.ts"
 import { expect, screenshotDir, test } from "./support/fixtures.ts"
 import { nameParam, translate, translateParams } from "./support/i18n.ts"
 import { gotoPage, waitForLocalWriteToSettle } from "./support/navigation.ts"
@@ -60,50 +61,6 @@ const expectReadableTarget = async (target: Locator): Promise<void> => {
   await expect(target).toBeVisible()
   expect(await isClipped(target)).toBe(false)
   expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
-}
-
-const pickContrast = async (
-  picked: Locator,
-  unpicked: Locator
-): Promise<number> => {
-  const unpickedHandle = await unpicked.elementHandle()
-  return picked.locator("svg").evaluate((mark, other) => {
-    const context = document
-      .createElement("canvas")
-      .getContext("2d", { willReadFrequently: true })
-    if (context === null || other === null) {
-      throw new Error("Cannot measure the contrast")
-    }
-    const rgba = (color: string) => {
-      context.clearRect(0, 0, 1, 1)
-      context.fillStyle = color
-      context.fillRect(0, 0, 1, 1)
-      return context.getImageData(0, 0, 1, 1).data
-    }
-    const opaqueBackgroundOf = (element: Element | null): Uint8ClampedArray => {
-      if (element === null) return rgba("white")
-      const color = rgba(getComputedStyle(element).backgroundColor)
-      return color[3] === 255
-        ? color
-        : opaqueBackgroundOf(element.parentElement)
-    }
-    const luminance = (color: Uint8ClampedArray) => {
-      const [r = 0, g = 0, b = 0] = [color[0], color[1], color[2]].map(
-        (channel = 0) => {
-          const value = channel / 255
-          return value <= 0.04045
-            ? value / 12.92
-            : ((value + 0.055) / 1.055) ** 2.4
-        }
-      )
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b
-    }
-    const [lighter, darker] = [
-      luminance(rgba(getComputedStyle(mark).color)),
-      luminance(opaqueBackgroundOf(other)),
-    ].sort((a, b) => b - a)
-    return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05)
-  }, unpickedHandle)
 }
 
 test("the bills list shows an ordinary open bill with nothing paid yet", async ({
@@ -827,7 +784,12 @@ test("resolving an overpayment fits a 320 px phone in Czech and marks the picked
     await expect(outside.locator("svg")).toBeVisible()
     await expect(register.locator("svg")).toBeHidden()
     await expect(register).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
-    expect(await pickContrast(outside, register)).toBeGreaterThanOrEqual(3)
+    expect(
+      await colorContrast(
+        [outside.locator("svg"), "color"],
+        [register, "background"]
+      )
+    ).toBeGreaterThanOrEqual(3)
   })
 })
 
