@@ -6,9 +6,9 @@ import {
   billPaymentState,
   buildBillRows,
   elapsedSeverity,
+  formatRowsSum,
   groupBillRowsByTableId,
   matchesTableFilter,
-  sumBillRows,
   type TableFilter,
   TableFilterSchema,
   tablePaymentState,
@@ -128,7 +128,9 @@ export function PosOverviewPage() {
   const visibleTiles = tiles.filter((tile) =>
     matchesTableFilter(tableFilter, tile.rows.length > 0)
   )
-  const floorTotal = sumBillRows(rows)
+  const floorTotal = formatRowsSum(rows, "left", (money) =>
+    formatMoney(money, locale)
+  )
 
   return (
     <FlatList
@@ -160,7 +162,7 @@ export function PosOverviewPage() {
               {floorTotal !== undefined && (
                 <FloorStat
                   label={t("home.pos.stats.total")}
-                  value={formatMoney(floorTotal, locale)}
+                  value={floorTotal}
                 />
               )}
             </XStack>
@@ -338,7 +340,13 @@ function TableTile({
   const newBill = useNewBill(table.id)
   const occupied = rows.length > 0
   const onlyBill = rows.length === 1 ? rows[0]?.bill : undefined
-  const total = sumBillRows(rows)
+  const left = formatRowsSum(rows, "left", (money) =>
+    formatMoney(money, locale)
+  )
+  const isPartlyPaid = rows.some(({ paid }) => paid > 0)
+  const paid = isPartlyPaid
+    ? formatRowsSum(rows, "paid", (money) => formatMoney(money, locale))
+    : undefined
   const elapsedMs =
     now -
     Math.min(...rows.map(({ bill }) => new Date(bill.createdAt).getTime()))
@@ -393,15 +401,15 @@ function TableTile({
         </ScrollView>
       )}
       <YStack gap={2}>
-        {total !== undefined && (
+        {left !== undefined && (
           <Text
             fontSize={fontSize.xl}
             lineHeight={fontSize.xl}
             fontWeight={fontWeight.bold}
             fontVariant={["tabular-nums"]}
-            numberOfLines={1}
+            numberOfLines={isPartlyPaid ? 2 : 1}
           >
-            {formatMoney(total, locale)}
+            {isPartlyPaid ? t("tables.tile.left", { amount: left }) : left}
           </Text>
         )}
         {occupied ? (
@@ -421,7 +429,10 @@ function TableTile({
               {t("tables.tile.itemCount", { value: itemCount })}
             </Text>
             {paymentState !== undefined && (
-              <BillPaymentStateBadge paymentState={paymentState} />
+              <BillPaymentStateBadge
+                paymentState={paymentState}
+                paid={paymentState === "partiallyPaid" ? paid : undefined}
+              />
             )}
           </XStack>
         ) : (
@@ -487,8 +498,10 @@ function TableTile({
 
 function BillPaymentStateBadge({
   paymentState,
+  paid,
 }: {
   readonly paymentState: BillPaymentState
+  readonly paid?: string | undefined
 }) {
   const { t } = useTranslation()
   return (
@@ -504,19 +517,21 @@ function BillPaymentStateBadge({
         fontWeight={fontWeight.semibold}
         color="info-foreground"
       >
-        {t(`tables.tile.${paymentState}`)}
+        {paid === undefined
+          ? t(`tables.tile.${paymentState}`)
+          : t("tables.tile.partiallyPaidAmount", { amount: paid })}
       </Text>
     </XStack>
   )
 }
 
 /**
- * One open bill as a chip: its total and, off a table, how long it has been
- * open, and its label when it has one.
+ * One open bill as a chip: what is left to pay on it and, off a table, how
+ * long it has been open, and its label when it has one.
  */
 function BillChip({
   bill,
-  stats,
+  left,
   now,
   showElapsed = true,
 }: BillWithStats & {
@@ -570,10 +585,7 @@ function BillChip({
           fontWeight={fontWeight.semibold}
           fontVariant={["tabular-nums"]}
         >
-          {formatMoney(
-            { value: stats.totalAmount, currency: bill.currency },
-            locale
-          )}
+          {formatMoney({ value: left, currency: bill.currency }, locale)}
         </Text>
         {showElapsed && (
           <Text
