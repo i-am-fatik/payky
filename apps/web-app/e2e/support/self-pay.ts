@@ -200,6 +200,22 @@ export async function receiveBankTransfer(
   }, transfer)
 }
 
+export async function seedMenu(
+  page: Page,
+  menu: {
+    readonly items: ReadonlyArray<{
+      readonly name: string
+      readonly internalName?: string
+      readonly amount: number
+    }>
+    readonly billsHidden?: boolean
+  }
+): Promise<void> {
+  await page.evaluate(async (value) => {
+    await window.__e2eSeedMenu?.(value)
+  }, menu)
+}
+
 export async function receiveShownBankTransfer(
   page: Page,
   {

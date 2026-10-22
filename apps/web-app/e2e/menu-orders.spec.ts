@@ -1,0 +1,143 @@
+import { addCatalogItem, addTable } from "./support/bill.ts"
+import { expect, test } from "./support/fixtures.ts"
+import { translate, translateParams } from "./support/i18n.ts"
+import { toggleInlineSwitch } from "./support/inline-edit.ts"
+import { gotoPage, reloadPage } from "./support/navigation.ts"
+import {
+  enableTableSelfPay,
+  routeFakeNostrRelays,
+  seedMenu,
+} from "./support/self-pay.ts"
+
+test("an item goes into the menu, sells out and comes back", async ({
+  seededPage: page,
+}) => {
+  const itemRow = page.getByRole("link", { name: /Goulash/ })
+  const editHeading = page.getByRole("heading", {
+    name: translate("en", "settings.items.form.title.edit"),
+  })
+  const inMenu = page.getByRole("switch", {
+    name: translate("en", "settings.items.form.inMenu.label"),
+  })
+  const soldOut = page.getByRole("switch", {
+    name: translate("en", "settings.items.form.soldOut.label"),
+  })
+
+  await test.step("add an item", () =>
+    addCatalogItem(page, "en", { name: "Goulash", price: "189" }))
+
+  await test.step("a new item is not in the menu", async () => {
+    await expect(itemRow).not.toContainText(
+      translate("en", "settings.items.inMenu")
+    )
+    await itemRow.click()
+    await editHeading.waitFor()
+    await expect(inMenu).not.toBeChecked()
+    await expect(soldOut).toHaveCount(0)
+  })
+
+  await test.step("put it in the menu and mark it sold out", async () => {
+    await toggleInlineSwitch(page, "settings.items.form.inMenu.label")
+    await toggleInlineSwitch(page, "settings.items.form.soldOut.label")
+  })
+
+  await test.step("the list marks it sold out", async () => {
+    await gotoPage(page, "/settings/items", "en", "settings.items.title")
+    await expect(itemRow).toContainText(
+      translate("en", "settings.items.soldOut")
+    )
+  })
+
+  await test.step("mark it available again", async () => {
+    await itemRow.click()
+    await editHeading.waitFor()
+    await expect(inMenu).toBeChecked()
+    await expect(soldOut).toBeChecked()
+    await toggleInlineSwitch(page, "settings.items.form.soldOut.label")
+  })
+
+  await test.step("the list marks it in the menu", async () => {
+    await gotoPage(page, "/settings/items", "en", "settings.items.title")
+    await expect(itemRow).toContainText(
+      translate("en", "settings.items.inMenu")
+    )
+    await expect(itemRow).not.toContainText(
+      translate("en", "settings.items.soldOut")
+    )
+  })
+})
+
+test("ordering is switched on with nothing in the menu, on this device", async ({
+  seededPage: page,
+  context,
+}) => {
+  await routeFakeNostrRelays(context)
+  const payBill = page.getByRole("switch", {
+    name: translate("en", "settings.tables.selfPayOptions.payBill"),
+  })
+  const order = page.getByRole("switch", {
+    name: translate("en", "settings.tables.selfPayOptions.order"),
+  })
+  const orderDevice = page.getByRole("combobox", {
+    name: translate("en", "settings.tables.selfPayOptions.orderDevice.label"),
+  })
+  const thisDevice = translateParams(
+    "en",
+    "settings.tables.selfPayOptions.orderDevice.this",
+    { name: "" }
+  ).trim()
+
+  await test.step("switch self-pay on for a table", async () => {
+    await addTable(page, "en", { name: "Table 3", seatCount: "4" })
+    await enableTableSelfPay(page, "en", "Table 3")
+    await gotoPage(page, "/settings/tables", "en", "settings.tables.title")
+  })
+
+  await test.step("guests pay bills and order nothing until it is switched on", async () => {
+    await expect(payBill).toBeChecked()
+    await expect(order).not.toBeChecked()
+    await expect(orderDevice).toHaveCount(0)
+  })
+
+  await test.step("switch ordering on", () =>
+    toggleInlineSwitch(page, "settings.tables.selfPayOptions.order"))
+
+  await test.step("the card says guests cannot order from an empty menu", async () => {
+    await expect(
+      page.getByText(
+        translate("en", "settings.tables.selfPayOptions.menu.empty.title")
+      )
+    ).toBeVisible()
+  })
+
+  await test.step("this device takes the orders", async () => {
+    await expect(orderDevice).toContainText(thisDevice)
+    await orderDevice.click()
+    await expect(page.getByRole("option")).toHaveCount(1)
+    await page.getByRole("option", { name: thisDevice }).click()
+    await expect(orderDevice).toContainText(thisDevice)
+  })
+
+  await test.step("an item in the menu clears the warning", async () => {
+    await seedMenu(page, { items: [{ name: "Coffee", amount: 6500 }] })
+    await expect(
+      page.getByText(
+        translateParams("en", "settings.tables.selfPayOptions.menu.visible", {
+          count: 1,
+        })
+      )
+    ).toBeVisible()
+    await expect(
+      page.getByText(
+        translate("en", "settings.tables.selfPayOptions.menu.empty.title")
+      )
+    ).toHaveCount(0)
+  })
+
+  await test.step("switch bill paying off and keep it after a reload", async () => {
+    await toggleInlineSwitch(page, "settings.tables.selfPayOptions.payBill")
+    await reloadPage(page, "en", "settings.tables.title")
+    await expect(payBill).not.toBeChecked()
+    await expect(order).toBeChecked()
+  })
+})

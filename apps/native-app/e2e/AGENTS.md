@@ -203,6 +203,9 @@ assertions.
   `lines=Beer:1/1,Pizza:1/5` (a fraction of each line, by name),
   `people=<n>` (an equal share) or, with neither, the rest of the bill;
   `amount` (minor units) and `message` replace what the transfer carries.
+- Menu (web's `__e2eSeedMenu`): `seedMenu` (`items=name:amount[:internalName],...`,
+  `billsHidden`) switches ordering on with this device taking orders and
+  puts the items in the menu.
 
 ## Selectors
 

@@ -20,6 +20,7 @@ import {
   SettingsListShell,
 } from "../settings-list-parts.tsx"
 import { SelfPayGuestNameCard } from "./self-pay-guest-name-card.tsx"
+import { SelfPayOptionsCard } from "./self-pay-options-card.tsx"
 import { TableStickerCheck } from "./table-sticker-check.tsx"
 
 /** Tables, as web's `TablesSettingsPage`. */
@@ -61,6 +62,7 @@ function TablesSettingsBody() {
           <TablesList search={debouncedSearch} hasAny={hasAny} />
         </Suspense>
         {takesSelfPay && <SelfPayGuestNameCard />}
+        {takesSelfPay && <SelfPayOptionsCard />}
       </YStack>
     </ScrollView>
   )

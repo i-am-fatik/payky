@@ -1078,7 +1078,10 @@ export const uiParityMap: ReadonlyArray<UiParityEntry> = [
   },
   {
     native: "src/features/settings/items/edit-item-page.tsx",
-    web: ["apps/web-app/src/features/settings/items/item-form-page.tsx"],
+    web: [
+      "apps/web-app/src/features/settings/items/item-form-page.tsx",
+      "apps/web-app/src/features/settings/inline-edit-switch.tsx",
+    ],
     status: "matched",
     allowedDifferences: {
       FieldError:
@@ -1093,7 +1096,10 @@ export const uiParityMap: ReadonlyArray<UiParityEntry> = [
   },
   {
     native: "src/features/settings/items/items-settings-page.tsx",
-    web: ["apps/web-app/src/features/settings/items/items-settings-page.tsx"],
+    web: [
+      "apps/web-app/src/features/settings/items/items-settings-page.tsx",
+      "apps/web-app/src/features/settings/items/items-list.tsx",
+    ],
     status: "matched",
   },
   {
@@ -1480,6 +1486,15 @@ export const uiParityMap: ReadonlyArray<UiParityEntry> = [
     native: "src/features/settings/tables/self-pay-guest-name-card.tsx",
     web: [
       "apps/web-app/src/features/settings/tables/self-pay-guest-name-card.tsx",
+    ],
+    status: "matched",
+  },
+  {
+    native: "src/features/settings/tables/self-pay-options-card.tsx",
+    web: [
+      "apps/web-app/src/features/settings/tables/self-pay-options-card.tsx",
+      "apps/web-app/src/features/settings/inline-edit-switch.tsx",
+      "apps/web-app/src/features/settings/inline-edit-select.tsx",
     ],
     status: "matched",
   },

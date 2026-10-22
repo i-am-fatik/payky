@@ -494,6 +494,7 @@ export const enSettings = {
     "Description is too long (255 characters max).",
   "settings.items.form.description.label": "Description",
   "settings.items.form.description.placeholder": "Optional",
+  "settings.items.form.inMenu.label": "In the menu",
   "settings.items.form.internalDescription.invalid":
     "Internal description is too long (255 characters max).",
   "settings.items.form.internalDescription.label": "Internal description",
@@ -507,6 +508,9 @@ export const enSettings = {
   "settings.items.form.internalName.placeholder":
     "Optional — shown to staff instead of the public name",
   "settings.items.form.invalidId": "Invalid item id.",
+  "settings.items.form.menu.description":
+    "Guests ordering at the table see the items in the menu, with their public name, description and price.",
+  "settings.items.form.menu.title": "Menu",
   "settings.items.form.name.invalid": "Enter a name.",
   "settings.items.form.name.label": "Name",
   "settings.items.form.name.placeholder": "e.g. Coffee",
@@ -523,14 +527,19 @@ export const enSettings = {
   "settings.items.form.sku.invalid": "SKU is too long (255 characters max).",
   "settings.items.form.sku.label": "SKU",
   "settings.items.form.sku.placeholder": "Optional",
+  "settings.items.form.soldOut.description":
+    "Guests do not see it until it is available again. It stays in the menu.",
+  "settings.items.form.soldOut.label": "Sold out",
   "settings.items.form.taxRate.description":
     "Applies to bills and payments once this item is used. Manage rates in Settings › Tax rates.",
   "settings.items.form.taxRate.label": "Tax rate",
   "settings.items.form.taxRate.none": "No tax rate",
   "settings.items.form.title.create": "Add item",
   "settings.items.form.title.edit": "Edit item",
+  "settings.items.inMenu": "In the menu",
   "settings.items.search": "Search items...",
   "settings.items.search.clear.aria": "Clear search",
+  "settings.items.soldOut": "Sold out",
   "settings.items.title": "Items",
   "settings.language.locale.czech.title": "Czechia",
   "settings.language.locale.description":
@@ -895,6 +904,26 @@ export const enSettings = {
     "Guests paying at the table see it as who they pay, on the page and in the payment QR. Leave it empty and they see no name.",
   "settings.tables.selfPayGuestName.placeholder": "Café on the Corner",
   "settings.tables.selfPayGuestName.error": "Use at most 255 characters.",
+  "settings.tables.selfPayOptions.menu.empty.description":
+    "No item in the menu is available. Put items in the menu on their detail, or mark them available again.",
+  "settings.tables.selfPayOptions.menu.empty.title": "Guests cannot order",
+  "settings.tables.selfPayOptions.menu.leftOut":
+    "Items that do not fit the menu: {count}. Guests do not see them.",
+  "settings.tables.selfPayOptions.menu.otherCurrency":
+    "Items not priced in {currency}: {count}. Guests do not see them.",
+  "settings.tables.selfPayOptions.menu.visible":
+    "Items guests can order: {count}",
+  "settings.tables.selfPayOptions.order": "Guests order from the menu",
+  "settings.tables.selfPayOptions.order.description":
+    "Guests order the items in the menu and pay for them. Staff see the paid orders under To serve.",
+  "settings.tables.selfPayOptions.orderDevice.description":
+    "It publishes the menu and records the paid orders, so keep it online.",
+  "settings.tables.selfPayOptions.orderDevice.label":
+    "Device that takes orders",
+  "settings.tables.selfPayOptions.orderDevice.placeholder": "Choose a device",
+  "settings.tables.selfPayOptions.orderDevice.this": "{name} (this device)",
+  "settings.tables.selfPayOptions.payBill": "Guests pay the table's bill",
+  "settings.tables.selfPayOptions.title": "What guests can do",
   "settings.tables.sticker.check": "Check a sticker",
   "settings.tables.sticker.current": "This sticker belongs to {name}.",
   "settings.tables.sticker.dismiss": "Dismiss",

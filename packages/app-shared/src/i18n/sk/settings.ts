@@ -498,6 +498,7 @@ export const skSettings = {
     "Popis je príliš dlhý (max. 255 znakov).",
   "settings.items.form.description.label": "Popis",
   "settings.items.form.description.placeholder": "Nepovinné",
+  "settings.items.form.inMenu.label": "V menu",
   "settings.items.form.internalDescription.invalid":
     "Interný popis je príliš dlhý (max. 255 znakov).",
   "settings.items.form.internalDescription.label": "Interný popis",
@@ -511,6 +512,9 @@ export const skSettings = {
   "settings.items.form.internalName.placeholder":
     "Nepovinné – zobrazí sa personálu namiesto verejného názvu",
   "settings.items.form.invalidId": "Neplatné ID položky.",
+  "settings.items.form.menu.description":
+    "Hostia, ktorí objednávajú pri stole, vidia položky z menu s ich verejným názvom, popisom a cenou.",
+  "settings.items.form.menu.title": "Menu",
   "settings.items.form.name.invalid": "Zadajte názov.",
   "settings.items.form.name.label": "Názov",
   "settings.items.form.name.placeholder": "napr. Káva",
@@ -527,14 +531,19 @@ export const skSettings = {
   "settings.items.form.sku.invalid": "SKU je príliš dlhé (max. 255 znakov).",
   "settings.items.form.sku.label": "SKU",
   "settings.items.form.sku.placeholder": "Nepovinné",
+  "settings.items.form.soldOut.description":
+    "Hostia ju neuvidia, kým nebude znova k dispozícii. V menu zostane.",
+  "settings.items.form.soldOut.label": "Vypredané",
   "settings.items.form.taxRate.description":
     "Uplatní sa na účtoch a platbách po použití tejto položky. Sadzby správte v Nastaveniach › Daňové sadzby.",
   "settings.items.form.taxRate.label": "Daňová sadzba",
   "settings.items.form.taxRate.none": "Bez daňovej sadzby",
   "settings.items.form.title.create": "Pridať položku",
   "settings.items.form.title.edit": "Upraviť položku",
+  "settings.items.inMenu": "V menu",
   "settings.items.search": "Hľadať položky...",
   "settings.items.search.clear.aria": "Vymazať hľadanie",
+  "settings.items.soldOut": "Vypredané",
   "settings.items.title": "Položky",
   "settings.language.locale.czech.title": "Česko",
   "settings.language.locale.description":
@@ -902,6 +911,28 @@ export const skSettings = {
     "Hosť, ktorý platí pri stole, ho uvidí ako príjemcu platby na stránke aj v QR kóde. Keď pole necháte prázdne, žiadne meno neuvidí.",
   "settings.tables.selfPayGuestName.placeholder": "Kaviareň Pod Lipou",
   "settings.tables.selfPayGuestName.error": "Zadajte najviac 255 znakov.",
+  "settings.tables.selfPayOptions.menu.empty.description":
+    "V menu nie je žiadna dostupná položka. Pridajte položky do menu v ich detaile alebo ich označte ako znova dostupné.",
+  "settings.tables.selfPayOptions.menu.empty.title":
+    "Hostia si nemôžu objednať",
+  "settings.tables.selfPayOptions.menu.leftOut":
+    "Položiek, ktoré sa do menu nezmestia: {count}. Hostia ich nevidia.",
+  "settings.tables.selfPayOptions.menu.otherCurrency":
+    "Položiek s cenou mimo {currency}: {count}. Hostia ich nevidia.",
+  "settings.tables.selfPayOptions.menu.visible":
+    "Položiek, ktoré si hostia môžu objednať: {count}",
+  "settings.tables.selfPayOptions.order": "Hostia objednávajú z menu",
+  "settings.tables.selfPayOptions.order.description":
+    "Hostia si objednajú položky z menu a zaplatia ich. Zaplatené objednávky obsluha uvidí v sekcii Na výdaj.",
+  "settings.tables.selfPayOptions.orderDevice.description":
+    "Zverejňuje menu a zapisuje zaplatené objednávky, preto ho nechajte online.",
+  "settings.tables.selfPayOptions.orderDevice.label":
+    "Zariadenie, ktoré prijíma objednávky",
+  "settings.tables.selfPayOptions.orderDevice.placeholder":
+    "Vyberte zariadenie",
+  "settings.tables.selfPayOptions.orderDevice.this": "{name} (toto zariadenie)",
+  "settings.tables.selfPayOptions.payBill": "Hostia platia účet stola",
+  "settings.tables.selfPayOptions.title": "Čo môžu hostia",
   "settings.tables.sticker.check": "Skontrolovať nálepku",
   "settings.tables.sticker.current": "Táto nálepka patrí k stolu {name}.",
   "settings.tables.sticker.dismiss": "Zavrieť",

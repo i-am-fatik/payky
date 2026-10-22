@@ -18,6 +18,8 @@ import type { CatalogItemRow } from "@payky/core/modules/catalog-item/catalog-it
 import {
   createCatalogItemAtEnd,
   deleteCatalogItem,
+  setCatalogItemInMenu,
+  setCatalogItemSoldOut,
   updateCatalogItem,
 } from "@payky/core/modules/catalog-item/catalog-item-actions"
 import {
@@ -74,6 +76,7 @@ import {
 } from "@/components/ui/select.tsx"
 import { InlineEditField } from "@/features/settings/inline-edit-field.tsx"
 import { InlineEditSelect } from "@/features/settings/inline-edit-select.tsx"
+import { InlineEditSwitch } from "@/features/settings/inline-edit-switch.tsx"
 import { SettingsFormCard } from "@/features/settings/settings-form-card.tsx"
 import { SettingsFormEmptyState } from "@/features/settings/settings-form-empty-state.tsx"
 import { useAppRun } from "@/hooks/use-app-run.ts"
@@ -781,6 +784,8 @@ function EditCatalogItemForm({ item }: { readonly item: CatalogItemRow }) {
         </CardContent>
       </Card>
 
+      <CatalogItemMenuCard item={item} />
+
       <ScanCodeScannerDialog
         open={scannerDialogOpen}
         onOpenChange={setScannerDialogOpen}
@@ -813,5 +818,47 @@ function EditCatalogItemForm({ item }: { readonly item: CatalogItemRow }) {
         {t("settings.items.delete")}
       </Button>
     </div>
+  )
+}
+
+function CatalogItemMenuCard({ item }: { readonly item: CatalogItemRow }) {
+  const { t } = useTranslation()
+  const appRun = useAppRun()
+  const inMenu = item.inMenu !== null
+
+  const saveInMenu = async (checked: boolean) => {
+    await using run = appRun()
+    await run.ok(setCatalogItemInMenu({ id: item.id, inMenu: checked }))
+  }
+
+  const saveSoldOut = async (checked: boolean) => {
+    await using run = appRun()
+    await run.ok(setCatalogItemSoldOut({ id: item.id, soldOut: checked }))
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("settings.items.form.menu.title")}</CardTitle>
+        <CardDescription>
+          {t("settings.items.form.menu.description")}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <InlineEditSwitch
+          label={t("settings.items.form.inMenu.label")}
+          defaultValue={inMenu}
+          onSave={saveInMenu}
+        />
+        {inMenu && (
+          <InlineEditSwitch
+            label={t("settings.items.form.soldOut.label")}
+            description={t("settings.items.form.soldOut.description")}
+            defaultValue={item.soldOut !== null}
+            onSave={saveSoldOut}
+          />
+        )}
+      </CardContent>
+    </Card>
   )
 }

@@ -17,8 +17,16 @@ import {
   legacyFiatBankAccountId,
 } from "@payky/core/modules/account/account-utils"
 import { createAccountTransaction } from "@payky/core/modules/account-transaction/account-transaction-actions"
-import { completeOnboarding } from "@payky/core/modules/app-settings/app-settings-actions"
-import { PaymentMethodOrderJson } from "@payky/core/modules/app-settings/app-settings-utils"
+import {
+  completeOnboarding,
+  setMenuOrdering,
+  setSelfPayBillsHidden,
+} from "@payky/core/modules/app-settings/app-settings-actions"
+import { settingsQuery } from "@payky/core/modules/app-settings/app-settings-queries"
+import {
+  getFiatCurrency,
+  PaymentMethodOrderJson,
+} from "@payky/core/modules/app-settings/app-settings-utils"
 import { cancelBill } from "@payky/core/modules/bill/bill-actions"
 import {
   billByIdQuery,
@@ -30,6 +38,10 @@ import {
   loadCalculatedBillLineSummaries,
 } from "@payky/core/modules/bill-line/bill-line-actions"
 import { deriveBillSummaryTotal } from "@payky/core/modules/bill-line/bill-line-utils"
+import {
+  createCatalogItemAtEnd,
+  setCatalogItemInMenu,
+} from "@payky/core/modules/catalog-item/catalog-item-actions"
 import {
   registerDevice,
   setDevicePinBlocked,
@@ -151,6 +163,26 @@ const GuestBankTransferParams = z.object({
   people: z.coerce.number().int().min(2).optional(),
   amount: z.coerce.number().int().positive().optional(),
   message: z.string().min(1).optional(),
+})
+
+const NonNegativeIntegerParam = z.string().regex(/^\d+$/u).transform(Number)
+
+const MenuItemParam = z
+  .string()
+  .transform((item) => item.split(":"))
+  .pipe(
+    z.union([
+      z.tuple([z.string().min(1), NonNegativeIntegerParam]),
+      z.tuple([z.string().min(1), NonNegativeIntegerParam, z.string().min(1)]),
+    ])
+  )
+
+const SeedMenuParams = z.object({
+  items: z
+    .string()
+    .transform((items) => items.split(","))
+    .pipe(z.array(MenuItemParam)),
+  billsHidden: z.stringbool().default(false),
 })
 
 export const e2eActions: Readonly<Record<string, E2eAction>> = {
@@ -684,6 +716,37 @@ export const e2eActions: Readonly<Record<string, E2eAction>> = {
     if (saleId === null)
       throw new Error("EET is not set up, so no sale was created.")
     return `pokl=${toEetCashRegisterId(otherDeviceId)}`
+  },
+
+  /**
+   * `__e2eSeedMenu`: ordering on with this device taking the orders, and
+   * `items` (`name:amount[:internalName]`, comma-separated) in the menu.
+   */
+  seedMenu: async (run, params, { deviceId }) => {
+    const { items, billsHidden } = SeedMenuParams.parse(params)
+    const [settings] = await run.deps.evolu.loadQuery(settingsQuery)
+    await run.ok(setMenuOrdering({ on: true, deviceId }))
+    await run.ok(setSelfPayBillsHidden(billsHidden))
+    for (const [name, amount, internalName] of items) {
+      const id = await run.ok(
+        createCatalogItemAtEnd({
+          deviceId: null,
+          categoryId: null,
+          name: NonEmptyString255(name),
+          description: null,
+          internalName:
+            internalName === undefined ? null : NonEmptyString255(internalName),
+          internalDescription: null,
+          sku: null,
+          currency: getFiatCurrency(settings),
+          unitAmount: NonNegativeInteger(amount),
+          scanCode: null,
+          taxRateId: null,
+        })
+      )
+      await run.ok(setCatalogItemInMenu({ id, inMenu: true }))
+    }
+    return undefined
   },
 }
 

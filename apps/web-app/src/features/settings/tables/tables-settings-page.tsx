@@ -5,6 +5,7 @@ import { ListSkeleton } from "@/components/list-skeleton.tsx"
 import { SearchInput } from "@/components/search-input.tsx"
 import { SettingsListPage } from "@/features/settings/settings-list-page.tsx"
 import { SelfPayGuestNameCard } from "@/features/settings/tables/self-pay-guest-name-card.tsx"
+import { SelfPayOptionsCard } from "@/features/settings/tables/self-pay-options-card.tsx"
 import { TableStickerCheck } from "@/features/settings/tables/table-sticker-check.tsx"
 import { TablesList } from "@/features/settings/tables/tables-list.tsx"
 import { useDebouncedValue } from "@/hooks/use-debounced-value.ts"
@@ -79,6 +80,7 @@ function TablesSettingsContent({
         <TablesList search={search} hasAny={hasAny} />
       </Suspense>
       {takesSelfPay && <SelfPayGuestNameCard />}
+      {takesSelfPay && <SelfPayOptionsCard />}
     </>
   )
 }
