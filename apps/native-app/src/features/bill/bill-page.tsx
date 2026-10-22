@@ -45,6 +45,7 @@ import type { SelfPayViewLine } from "@payky/core/modules/table-self-pay/table-s
 import { isSameDay } from "date-fns"
 import { Redirect, router, useLocalSearchParams } from "expo-router"
 import ChevronDown from "lucide-react-native/icons/chevron-down"
+import CircleCheck from "lucide-react-native/icons/circle-check"
 import Minus from "lucide-react-native/icons/minus"
 import Plus from "lucide-react-native/icons/plus"
 import Redo2 from "lucide-react-native/icons/redo-2"
@@ -120,6 +121,7 @@ import { ItemQuantityDialog } from "./item-quantity-controls.tsx"
 import { ScanCodeCollisionDialog } from "./scan-code-collision-dialog.tsx"
 import { SplitBillDialog } from "./split-bill-dialog.tsx"
 import { useCartBill } from "./use-cart-bill.ts"
+import { useGuestMoneyArrivals } from "./use-guest-money-arrivals.ts"
 import { useSplitBill } from "./use-split-bill.ts"
 
 /** The category filters, plus "on the bill": only what the bill holds. */
@@ -199,6 +201,12 @@ function BillPage({
   const summaries = useBillLineSummaries(billId)
   const pendingPaymentIds = usePendingPayments(billId)
   const billStatus = useBillStatus(billId)
+  const currency = bill?.currency ?? getFiatCurrency(settings)
+  const { guestsClosedBill } = useGuestMoneyArrivals({
+    billId,
+    billStatus,
+    currency,
+  })
 
   // As web: a bill that is already closed when opened (Back, a stale link)
   // goes to its detail, which `sell` alone cannot read, so the PIN gate asks.
@@ -225,6 +233,9 @@ function BillPage({
         <ActivityIndicator size="large" />
       </YStack>
     )
+  if (bill !== undefined && guestsClosedBill) {
+    return <GuestsPaidBillMessage billId={billId} />
+  }
   if (bill !== undefined && billStatus?.status !== "open")
     return billStatus?.hasCancellationCollision ? (
       <BillCancellationCollisionMessage
@@ -255,7 +266,7 @@ function BillPage({
           ? t("bill.title")
           : (bill.label ?? t("bill.list.label", { number: bill.displayNumber }))
       }
-      currency={bill?.currency ?? getFiatCurrency(settings)}
+      currency={currency}
       tipsEnabled={settings?.tipsEnabled === sqliteTrue}
       summaries={summaries}
       claimedSum={billStatus?.claimedSum ?? NonNegativeInteger(0)}
@@ -291,6 +302,30 @@ function BillMessage({
           }
         />
         <Button size="lg" label={t("paymentWait.back")} onPress={goHome} />
+      </YStack>
+    </SafeAreaView>
+  )
+}
+
+function GuestsPaidBillMessage({ billId }: { readonly billId: BillId }) {
+  const { t } = useTranslation()
+  return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <YStack mt={64} px={24} gap={16} items="center">
+        <Alert variant="success" icon={CircleCheck}>
+          <AlertTitle>{t("bill.guestMoney.closed")}</AlertTitle>
+        </Alert>
+        <Button
+          size="lg"
+          variant="outline"
+          label={t("bill.guestMoney.openDetail")}
+          onPress={() =>
+            router.push({
+              pathname: "/activity/bills/[billId]",
+              params: { billId },
+            })
+          }
+        />
       </YStack>
     </SafeAreaView>
   )
@@ -889,6 +924,11 @@ function BillCart({
                     </Text>
                   </XStack>
                   <XStack items="center" gap={8}>
+                    {claimedSum > 0 && (
+                      <Text fontSize={fontSize.base} lineHeight={fontSize.base}>
+                        {t("bill.summary.leftToPay")}
+                      </Text>
+                    )}
                     <Text
                       fontSize={fontSize.base}
                       lineHeight={fontSize.base}

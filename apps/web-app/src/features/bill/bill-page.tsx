@@ -54,6 +54,7 @@ import {
   AlertTriangleIcon,
   ArrowLeftIcon,
   ChevronDown,
+  CircleCheckIcon,
   Eraser,
   Minus,
   Plus,
@@ -87,7 +88,7 @@ import {
   AlertTitle,
 } from "@/components/reui/alert.tsx"
 import { SearchInput } from "@/components/search-input.tsx"
-import { Button } from "@/components/ui/button.tsx"
+import { Button, buttonVariants } from "@/components/ui/button.tsx"
 import { Card, CardContent } from "@/components/ui/card.tsx"
 import {
   Collapsible,
@@ -107,6 +108,7 @@ import { useBillScanHandler } from "@/features/bill/use-bill-scan-handler.tsx"
 import { useCartBill } from "@/features/bill/use-cart-bill.ts"
 import { useChangePulse } from "@/features/bill/use-change-pulse.ts"
 import { useCoveringEditQuestion } from "@/features/bill/use-covering-edit-question.ts"
+import { useGuestMoneyArrivals } from "@/features/bill/use-guest-money-arrivals.ts"
 import { usePendingPayments } from "@/features/bill/use-pending-payments.ts"
 import { CategoryFilterBar } from "@/features/shared/category-filter-bar.tsx"
 import { useBillCancellationCollisionActions } from "@/features/shared/use-bill-cancellation-collision-actions.ts"
@@ -203,6 +205,11 @@ export function BillPage({
   const summaries = useBillLineSummaries(billId)
   const pendingPaymentIds = usePendingPayments(billId)
   const billStatus = useBillStatus(billId)
+  const { guestsClosedBill } = useGuestMoneyArrivals({
+    billId,
+    billStatus,
+    currency: bill?.currency ?? fallbackCurrency,
+  })
   // A cancellation collision stays: confirming the bill despite it is `sell`.
   const closedOnOpen = useRedirectIfClosedOnOpen(
     billId,
@@ -232,6 +239,8 @@ export function BillPage({
   let titleInPanel = false
   if (closedOnOpen) {
     content = null
+  } else if (bill !== undefined && guestsClosedBill) {
+    content = <GuestsPaidBillMessage billId={bill.id} />
   } else if (bill !== undefined && billStatus?.status !== "open") {
     content = billStatus?.hasCancellationCollision ? (
       <BillCancellationCollisionMessage
@@ -372,6 +381,26 @@ function BillPageLayout({
 function BillMessage({ message }: { readonly message: string }) {
   return (
     <p className="mt-16 px-6 text-center text-muted-foreground">{message}</p>
+  )
+}
+
+function GuestsPaidBillMessage({ billId }: { readonly billId: BillId }) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="mt-16 flex flex-col items-center gap-4 px-6">
+      <Alert variant="success">
+        <CircleCheckIcon />
+        <AlertTitle>{t("bill.guestMoney.closed")}</AlertTitle>
+      </Alert>
+      <Link
+        to="/activity/bills/$billId"
+        params={{ billId }}
+        className={cn(buttonVariants({ variant: "outline" }), "h-12")}
+      >
+        {t("bill.guestMoney.openDetail")}
+      </Link>
+    </div>
   )
 }
 
@@ -1091,6 +1120,11 @@ function BillCartView({
                     {t("bill.itemsCount", { value: itemCount })}
                   </div>
                   <div className="flex items-center gap-2 text-base font-semibold">
+                    {claimedSum > 0 && (
+                      <span className="font-normal">
+                        {t("bill.summary.leftToPay")}
+                      </span>
+                    )}
                     <motion.span animate={amountDuePulseControls}>
                       {formatMoney({ value: amountDue, currency }, locale)}
                     </motion.span>
