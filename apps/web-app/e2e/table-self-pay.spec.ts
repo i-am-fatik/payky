@@ -1747,4 +1747,70 @@ test.describe("the till", () => {
       expect(new URL(page.url()).pathname).toBe(`/activity/bills/${billId}`)
     })
   })
+
+  test("removing the beer guests paid for asks first with the amount, and so does discarding the bill", async ({
+    seededPage: page,
+    context,
+  }) => {
+    test.setTimeout(120_000)
+    await routeFakeNostrRelays(context)
+    const { guestAddress } =
+      await test.step("seed a table with self-pay and a bill of a pizza and a beer", () =>
+        seedPizzaAndBeerBill(page, "Table 15"))
+    const question = page.getByRole("alertdialog")
+    const removeBeer = page.getByRole("button", {
+      name: nameParam("bill.brick.remove.aria", "Beer"),
+    })
+
+    await test.step("a guest pays the beer and its brick says so", async () => {
+      const guest = await context.newPage()
+      await guest.goto(guestAddress)
+      await payAllOfTheBeer(page, guest)
+      await guest.close()
+      await expect(
+        page.getByText(
+          translateParams("en", "bill.brick.guestPaid", { amount: "$45.00" }),
+          { exact: true }
+        )
+      ).toBeVisible({ timeout: 30_000 })
+    })
+
+    await test.step("tapping − on the beer asks with what guests paid before removing it", async () => {
+      await removeBeer.click()
+      await expect(question).toContainText(
+        translateParams("en", "bill.guestPaid.remove.title", { names: "Beer" })
+      )
+      await expect(question).toContainText(
+        translateParams("en", "bill.guestPaid.description", {
+          amount: "$45.00",
+          names: "Beer",
+        })
+      )
+      await question
+        .getByRole("button", { name: translate("en", "bill.cover.cancel") })
+        .click()
+      await expect(question).toBeHidden()
+      await expect(removeBeer).toBeVisible()
+      await expect(page.getByTestId("bill-summary-trigger")).toContainText(
+        `${translate("en", "bill.summary.leftToPay")}$101.00`
+      )
+    })
+
+    await test.step("discarding the bill names the guest money that stays on it", async () => {
+      await page
+        .getByRole("button", { name: translate("en", "bill.discard") })
+        .click()
+      await expect(question).toContainText(
+        translateParams("en", "bill.discard.confirm.paid.description", {
+          amount: "$45.00",
+        })
+      )
+      await question
+        .getByRole("button", {
+          name: translate("en", "bill.discard.confirm.cancel"),
+        })
+        .click()
+      await expect(question).toBeHidden()
+    })
+  })
 })

@@ -800,7 +800,12 @@ function BillCartView({
 
     const confirmed = await confirm({
       title: t("bill.discard.confirm.title"),
-      description: t("bill.discard.confirm.description"),
+      description:
+        claimedSum > 0
+          ? t("bill.discard.confirm.paid.description", {
+              amount: formatMoney({ value: claimedSum, currency }, locale),
+            })
+          : t("bill.discard.confirm.description"),
       confirmLabel: t("bill.discard.confirm.confirm"),
       cancelLabel: t("bill.discard.confirm.cancel"),
       variant: "destructive",
@@ -1033,6 +1038,7 @@ function BillCartView({
                         <ItemBrick
                           catalogItem={catalogItem}
                           summaries={summaries}
+                          selfPayAllocated={selfPayAllocated}
                           locale={locale}
                           onAdd={() => void cart.addOne(catalogItem)}
                           onAddQuantity={(quantity) =>
@@ -1525,6 +1531,7 @@ function SelfPayLineStatus({
 function ItemBrick({
   catalogItem,
   summaries,
+  selfPayAllocated,
   locale,
   onAdd,
   onAddQuantity,
@@ -1532,6 +1539,7 @@ function ItemBrick({
 }: {
   readonly catalogItem: CatalogItemRow
   readonly summaries: ReadonlyArray<BillLineSummary>
+  readonly selfPayAllocated: ReadonlyMap<string, number>
   readonly locale: string
   readonly onAdd: () => void
   readonly onAddQuantity: (quantity: PositiveNumber) => void
@@ -1550,6 +1558,13 @@ function ItemBrick({
   const latestSummary = useMemo(
     () => getLatestCatalogItemSummary(matchingSummaries, catalogItem.id),
     [catalogItem.id, matchingSummaries]
+  )
+  const guestPaid = NonNegativeInteger(
+    matchingSummaries.reduce(
+      (sum, summary) =>
+        sum + projectSelfPayViewLine(summary, selfPayAllocated).allocatedAmount,
+      0
+    )
   )
 
   const [quantityDialogOpen, setQuantityDialogOpen] = useState(false)
@@ -1587,7 +1602,19 @@ function ItemBrick({
        * drops it.
        */}
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 pt-0.5 font-medium lg:text-base">{name}</p>
+        <div className="min-w-0 pt-0.5">
+          <p className="font-medium lg:text-base">{name}</p>
+          {guestPaid > 0 && (
+            <p className="text-xs font-medium tabular-nums">
+              {t("bill.brick.guestPaid", {
+                amount: formatMoney(
+                  { value: guestPaid, currency: catalogItem.currency },
+                  locale
+                ),
+              })}
+            </p>
+          )}
+        </div>
         <Button
           type="button"
           size="sm"

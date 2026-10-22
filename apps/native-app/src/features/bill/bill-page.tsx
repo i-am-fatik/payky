@@ -680,7 +680,12 @@ function BillCart({
     if (!billExists) return
     const confirmed = await confirm({
       title: t("bill.discard.confirm.title"),
-      description: t("bill.discard.confirm.description"),
+      description:
+        claimedSum > 0
+          ? t("bill.discard.confirm.paid.description", {
+              amount: formatMoney({ value: claimedSum, currency }, locale),
+            })
+          : t("bill.discard.confirm.description"),
       confirmLabel: t("bill.discard.confirm.confirm"),
       cancelLabel: t("bill.discard.confirm.cancel"),
       variant: "destructive",
@@ -764,6 +769,7 @@ function BillCart({
                 <ItemBrick
                   catalogItem={lastScanned}
                   summaries={summaries}
+                  selfPayAllocated={selfPayAllocated}
                   locale={locale}
                   onAdd={() => void cart.addOne(lastScanned)}
                   onAddQuantity={(quantity) =>
@@ -818,6 +824,7 @@ function BillCart({
                       <ItemBrick
                         catalogItem={item}
                         summaries={summaries}
+                        selfPayAllocated={selfPayAllocated}
                         locale={locale}
                         onAdd={() => void cart.addOne(item)}
                         onAddQuantity={(quantity) =>
@@ -1342,6 +1349,7 @@ function CatalogEmpty() {
 function ItemBrick({
   catalogItem,
   summaries,
+  selfPayAllocated,
   locale,
   onAdd,
   onAddQuantity,
@@ -1349,6 +1357,7 @@ function ItemBrick({
 }: {
   readonly catalogItem: CatalogItemRow
   readonly summaries: ReadonlyArray<BillLineSummary>
+  readonly selfPayAllocated: ReadonlyMap<string, number>
   readonly locale: string
   readonly onAdd: () => void
   readonly onAddQuantity: (quantity: PositiveNumber) => void
@@ -1361,6 +1370,16 @@ function ItemBrick({
     (sum, summary) =>
       summary.catalogItemId === catalogItem.id ? sum + summary.quantity : sum,
     0
+  )
+  const guestPaid = NonNegativeInteger(
+    summaries.reduce(
+      (sum, summary) =>
+        summary.catalogItemId === catalogItem.id
+          ? sum +
+            projectSelfPayViewLine(summary, selfPayAllocated).allocatedAmount
+          : sum,
+      0
+    )
   )
   const latestSummary = getLatestCatalogItemSummary(summaries, catalogItem.id)
 
@@ -1395,14 +1414,24 @@ function ItemBrick({
         gap={8}
         pointerEvents="box-none"
       >
-        <Text
-          flex={1}
-          pt={2}
-          fontWeight={fontWeight.medium}
-          pointerEvents="none"
-        >
-          {name}
-        </Text>
+        <YStack flex={1} pt={2} pointerEvents="none">
+          <Text fontWeight={fontWeight.medium}>{name}</Text>
+          {guestPaid > 0 && (
+            <Text
+              fontSize={fontSize.xs}
+              lineHeight={fontSize.xs}
+              fontWeight={fontWeight.medium}
+              fontVariant={["tabular-nums"]}
+            >
+              {t("bill.brick.guestPaid", {
+                amount: formatMoney(
+                  { value: guestPaid, currency: catalogItem.currency },
+                  locale
+                ),
+              })}
+            </Text>
+          )}
+        </YStack>
         <Button
           size="sm"
           shrink={0}
