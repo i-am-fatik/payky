@@ -47,7 +47,8 @@ refund shrank an earlier one.
 A refund from an app version without this rule records no part and is read
 as a return of what the claims and answers recorded up to it showed. The
 answer to the question is final, like the refund. Returning only a duplicate
-shows the payment partly refunded while its real sale stands, as before.
+leaves the payment's real sale standing, and refund/0008 decides how that
+return reads.
 
 ## Enforced by
 

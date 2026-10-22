@@ -6,9 +6,11 @@ import {
 } from "@payky/app-shared/qerko-terminal-flow"
 import {
   defaultRefundMethod,
+  deriveGoodsPartOfReturn,
   deriveQerkoPaymentRefund,
   deriveRefundAmountText,
   deriveRefundForm,
+  deriveRefundOverpayment,
   describeQerkoRefundError,
   qerkoPaymentRefundErrorKeys,
   type RefundablePaymentLine,
@@ -17,12 +19,13 @@ import {
   type RefundQuantities,
   refundErrorKeys,
   refundMethodLabelKey,
+  returnedOverpaymentLabel,
   stepRefundQuantity,
   tipRefundErrorKeys,
 } from "@payky/app-shared/refund-form"
 import type { EetDeliveryOutcome } from "@payky/core/integrations/eet/eet-client"
 import type { BillId } from "@payky/core/modules/bill/bill-types"
-import { deriveReturnableOverpayment } from "@payky/core/modules/bill/bill-utils"
+import type { BillOverpaymentInput } from "@payky/core/modules/bill/bill-utils"
 import {
   type DeliverEetReversalError,
   deliverEetReversal,
@@ -64,7 +67,9 @@ import {
   deriveRefundableTipAmount,
   isTipRefund,
   type RefundableLine,
+  returnedOverpaymentOf,
   sumGoodsRefundAmounts,
+  sumReturnedOverpayment,
 } from "@payky/core/modules/refund/refund-utils"
 import { calculatePaymentExcess } from "@payky/core/modules/shared/claimed-amount"
 import {
@@ -77,6 +82,7 @@ import { Link } from "@tanstack/react-router"
 import { parseISO } from "date-fns"
 import { useAtomValue, useStore } from "jotai"
 import {
+  AlertTriangleIcon,
   LoaderCircleIcon,
   MinusIcon,
   PlusIcon,
@@ -86,6 +92,7 @@ import {
 import { useState } from "react"
 import { toast } from "sonner"
 import { accountAtom } from "@/atoms/account.ts"
+import { Alert, AlertDescription } from "@/components/reui/alert.tsx"
 import { Button } from "@/components/ui/button.tsx"
 import {
   Card,
@@ -110,7 +117,7 @@ import {
   FieldSet,
 } from "@/components/ui/field.tsx"
 import { Input } from "@/components/ui/input.tsx"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.tsx"
+import { ToggleGroup } from "@/components/ui/toggle-group.tsx"
 import { ChoiceToggleItem } from "@/features/activity/choice-toggle-item.tsx"
 import {
   EetSaleStatusBadge,
@@ -197,10 +204,7 @@ function usePaymentRefundState(
       payment.billId === null || otherClaimedPayments.length > 0
         ? []
         : deriveRefundableLines(paymentLines, refundLines),
-    returnableOverpayment:
-      overpaymentInput === undefined
-        ? NonNegativeInteger(0)
-        : deriveReturnableOverpayment(overpaymentInput, payment.id),
+    overpaymentInput,
     qerkoAttempts,
     qerkoPaymentAttempts,
     qerkoRefundable:
@@ -261,7 +265,7 @@ function LoadedPaymentRefundDialog({
       billLabel={billLabel}
       currency={payment.currency}
       remainingAmount={state.remainingAmount}
-      returnableOverpayment={state.returnableOverpayment}
+      overpaymentInput={state.overpaymentInput}
       refundableLines={state.refundableLines}
       tipAmount={state.refundableTipAmount}
       defaultMethod={defaultMethod}
@@ -298,7 +302,7 @@ export function PaymentDetailRefunds({
     remainingAmount,
     refundableTipAmount,
     refundableLines,
-    returnableOverpayment,
+    overpaymentInput,
     qerkoAttempts,
     qerkoPaymentAttempts,
     qerkoRefundable,
@@ -390,6 +394,7 @@ export function PaymentDetailRefunds({
               <RefundBadge
                 summary={{
                   refundedAmount: sumGoodsRefundAmounts(refunds),
+                  returnedOverpaymentAmount: sumReturnedOverpayment(refunds),
                   refundableAmount,
                   currency: payment.currency,
                 }}
@@ -411,6 +416,9 @@ export function PaymentDetailRefunds({
                     <span className="text-xs text-muted-foreground">
                       {isTipRefund(refund)
                         ? `${t("paymentDetail.refunds.tip")} · `
+                        : null}
+                      {returnedOverpaymentOf(refund) > 0
+                        ? `${returnedOverpaymentLabel({ refund, t, format: formatMinor })} · `
                         : null}
                       {t(refundMethodLabelKey[refund.method])} ·{" "}
                       {formatDateTime(new Date(refund.refundedAt), locale)}
@@ -447,7 +455,7 @@ export function PaymentDetailRefunds({
           billLabel={null}
           currency={payment.currency}
           remainingAmount={remainingAmount}
-          returnableOverpayment={returnableOverpayment}
+          overpaymentInput={overpaymentInput}
           refundableLines={refundableLines}
           tipAmount={refundableTipAmount}
           defaultMethod={defaultMethod}
@@ -539,7 +547,7 @@ function RefundDialog({
   billLabel,
   currency,
   remainingAmount,
-  returnableOverpayment,
+  overpaymentInput,
   refundableLines,
   tipAmount,
   defaultMethod,
@@ -551,7 +559,7 @@ function RefundDialog({
   readonly billLabel: string | null
   readonly currency: FiatCurrency
   readonly remainingAmount: NonNegativeInteger
-  readonly returnableOverpayment: NonNegativeInteger
+  readonly overpaymentInput: BillOverpaymentInput | undefined
   readonly refundableLines: ReadonlyArray<RefundableLine<RefundablePaymentLine>>
   readonly tipAmount: NonNegativeInteger
   readonly defaultMethod: RefundDialogMethod
@@ -567,11 +575,16 @@ function RefundDialog({
   const jotaiStore = useStore()
   const [mode, setMode] = useState<RefundMode>("amount")
   const [method, setMethod] = useState<RefundDialogMethod>(defaultMethod)
+  const { returnableOverpayment, overpaidBy } = deriveRefundOverpayment(
+    overpaymentInput,
+    paymentId
+  )
   const asksPurpose = returnableOverpayment > 0 && mode === "amount"
   const [purpose, setPurpose] = useState<RefundPurpose>(
     returnableOverpayment > 0 ? "overpayment" : "goods"
   )
   const [typedAmountText, setTypedAmountText] = useState<string | null>(null)
+  const [amountLeft, setAmountLeft] = useState(false)
   const amountText = deriveRefundAmountText({
     typedAmountText,
     remainingAmount,
@@ -592,6 +605,20 @@ function RefundDialog({
     remainingAmount,
     currency,
   })
+  const amountError =
+    amountLeft && typedAmount === null
+      ? t("refund.dialog.amount.invalid", {
+          amount: formatMinor(remainingAmount),
+        })
+      : null
+  const goodsPartOfReturn =
+    asksPurpose && purpose === "overpayment"
+      ? deriveGoodsPartOfReturn({
+          overpaymentInput,
+          paymentId,
+          amount: typedAmount,
+        })
+      : NonNegativeInteger(0)
 
   const stepQuantity = (
     refundable: RefundableLine<RefundablePaymentLine>,
@@ -673,6 +700,13 @@ function RefundDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-5">
+          {overpaidBy > 0 ? (
+            <p className="text-sm font-semibold">
+              {t("overpayment.title", {
+                amount: formatMinor(overpaidBy),
+              })}
+            </p>
+          ) : null}
           {tipAmount > 0 ? (
             <p className="text-sm text-muted-foreground">
               {t("refund.dialog.tipHint", { amount: formatMinor(tipAmount) })}
@@ -690,12 +724,12 @@ function RefundDialog({
                 if (value === "amount" || value === "items") setMode(value)
               }}
             >
-              <ToggleGroupItem value="amount">
+              <ChoiceToggleItem value="amount">
                 {t("refund.dialog.mode.amount")}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="items">
+              </ChoiceToggleItem>
+              <ChoiceToggleItem value="items">
                 {t("refund.dialog.mode.items")}
-              </ToggleGroupItem>
+              </ChoiceToggleItem>
             </ToggleGroup>
           ) : null}
 
@@ -728,7 +762,7 @@ function RefundDialog({
           ) : null}
 
           {mode === "amount" ? (
-            <Field data-invalid={typedAmount === null}>
+            <Field data-invalid={amountError !== null}>
               <FieldLabel htmlFor="refund-amount">
                 {t("refund.dialog.amount.label")}
               </FieldLabel>
@@ -738,18 +772,27 @@ function RefundDialog({
                 inputMode="decimal"
                 autoComplete="off"
                 disabled={pending}
-                aria-invalid={typedAmount === null}
-                onChange={(event) =>
-                  setTypedAmountText(event.currentTarget.value)
+                aria-invalid={amountError !== null}
+                aria-describedby={
+                  amountError === null ? undefined : "refund-amount-error"
                 }
+                onChange={(event) => {
+                  setTypedAmountText(event.currentTarget.value)
+                  setAmountLeft(false)
+                }}
+                onBlur={() => setAmountLeft(true)}
               />
-              <FieldError>
-                {typedAmount === null
-                  ? t("refund.dialog.amount.invalid", {
-                      amount: formatMinor(remainingAmount),
-                    })
-                  : null}
-              </FieldError>
+              <FieldError id="refund-amount-error">{amountError}</FieldError>
+              {goodsPartOfReturn > 0 ? (
+                <Alert variant="warning">
+                  <AlertTriangleIcon />
+                  <AlertDescription>
+                    {t("refund.dialog.goodsPart", {
+                      amount: formatMinor(goodsPartOfReturn),
+                    })}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
             </Field>
           ) : (
             <FieldSet>

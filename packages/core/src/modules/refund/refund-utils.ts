@@ -52,6 +52,22 @@ export const isTipRefund = ({
   readonly isTip: typeof sqliteTrue | null
 }): boolean => isTip === sqliteTrue
 
+export const returnedOverpaymentOf = (refund: {
+  readonly isTip: typeof sqliteTrue | null
+  readonly overpaymentAmount: NonNegativeInteger | null
+}): NonNegativeInteger =>
+  NonNegativeInteger(isTipRefund(refund) ? 0 : (refund.overpaymentAmount ?? 0))
+
+export const sumReturnedOverpayment = (
+  refunds: ReadonlyArray<{
+    readonly isTip: typeof sqliteTrue | null
+    readonly overpaymentAmount: NonNegativeInteger | null
+  }>
+): NonNegativeInteger =>
+  NonNegativeInteger(
+    refunds.reduce((sum, refund) => sum + returnedOverpaymentOf(refund), 0)
+  )
+
 export const sumGoodsRefundAmounts = (
   refunds: ReadonlyArray<{
     readonly amount: NonNegativeInteger
@@ -123,6 +139,7 @@ export const deriveRefundState = ({
 
 export interface PaymentRefundSummary {
   readonly refundedAmount: NonNegativeInteger
+  readonly returnedOverpaymentAmount: NonNegativeInteger
   readonly refundableAmount: NonNegativeInteger
   readonly currency: FiatCurrency
 }
@@ -133,6 +150,7 @@ export const summarizeRefundsByPayment = (
     readonly amount: NonNegativeInteger
     readonly currency: FiatCurrency
     readonly isTip: typeof sqliteTrue | null
+    readonly overpaymentAmount: NonNegativeInteger | null
     readonly paymentAmount: NonNegativeInteger
     readonly paymentTipAmount: NonNegativeInteger
     readonly paymentCurrency: FiatCurrency
@@ -156,10 +174,15 @@ export const summarizeRefundsByPayment = (
       })),
       amount: refund.paymentAmount,
     })
+    const summary = summaries.get(refund.paymentId)
     summaries.set(refund.paymentId, {
       refundedAmount: NonNegativeInteger(
-        (summaries.get(refund.paymentId)?.refundedAmount ?? 0) +
+        (summary?.refundedAmount ?? 0) +
           (isTipRefund(refund) ? 0 : refund.amount)
+      ),
+      returnedOverpaymentAmount: NonNegativeInteger(
+        (summary?.returnedOverpaymentAmount ?? 0) +
+          returnedOverpaymentOf(refund)
       ),
       refundableAmount: deriveRefundableAmount({
         amount: refund.paymentAmount,

@@ -1,3 +1,4 @@
+import type { Money } from "@payky/core/modules/shared/money"
 import { describe, expect, test } from "vitest"
 import {
   type BillHistoryRow,
@@ -7,15 +8,17 @@ import {
   formatActivityDayTitle,
   hasAnyIssue,
   type PaymentHistoryRow,
-  refundBadgeLabel,
+  refundBadgeLabels,
   resolvePaymentTitle,
   summarizeBillHistoryRow,
   sumSettledTips,
 } from "./activity-history.ts"
 import { paykyBrand } from "./brand.ts"
+import { formatMoney } from "./format-money.ts"
 import { createTranslate } from "./i18n/translate.ts"
 
 const t = createTranslate("en", paykyBrand)
+const formatEnUs = (money: Money) => formatMoney(money, "en-US")
 const now = new Date(2026, 9, 17, 12)
 
 /** A pending, bill-less payment; tests override only what they exercise. */
@@ -260,21 +263,41 @@ describe("formatActivityDayTitle", () => {
   })
 })
 
-describe("refundBadgeLabel", () => {
-  const summary = (refundedAmount: number, refundableAmount: number) =>
-    ({ refundedAmount, refundableAmount, currency: "CZK" }) as never
+describe("refundBadgeLabels", () => {
+  const summary = (
+    refundedAmount: number,
+    refundableAmount: number,
+    returnedOverpaymentAmount = 0
+  ) =>
+    ({
+      refundedAmount,
+      returnedOverpaymentAmount,
+      refundableAmount,
+      currency: "USD",
+    }) as never
 
   test("is empty for no summary or nothing refunded", () => {
-    expect(refundBadgeLabel(undefined, t, "en-US")).toBeNull()
-    expect(refundBadgeLabel(summary(0, 100), t, "en-US")).toBeNull()
+    expect(refundBadgeLabels(undefined, t, formatEnUs)).toEqual([])
+    expect(refundBadgeLabels(summary(0, 100), t, formatEnUs)).toEqual([])
   })
 
   test("names a partial and a full refund differently", () => {
-    const partial = refundBadgeLabel(summary(50, 100), t, "en-US")
-    const full = refundBadgeLabel(summary(100, 100), t, "en-US")
-    expect(partial).not.toBeNull()
-    expect(full).not.toBeNull()
-    expect(partial).not.toBe(full)
+    expect(refundBadgeLabels(summary(50, 100), t, formatEnUs)).toEqual([
+      "Partly refunded $0.50",
+    ])
+    expect(refundBadgeLabels(summary(100, 100), t, formatEnUs)).toEqual([
+      "Refunded $1.00",
+    ])
+  })
+
+  test("reads a returned overpayment as one, apart from the goods (refund/0008)", () => {
+    expect(refundBadgeLabels(summary(400, 1000, 400), t, formatEnUs)).toEqual([
+      "Returned overpayment $4.00",
+    ])
+    expect(refundBadgeLabels(summary(700, 1000, 500), t, formatEnUs)).toEqual([
+      "Returned overpayment $5.00",
+      "Partly refunded $2.00",
+    ])
   })
 })
 

@@ -76,6 +76,9 @@ export const enPayment = {
   "paymentDetail.refunds.title": "Refunds",
   "paymentDetail.refunds.tipAction": "Refund the tip ({amount})",
   "paymentDetail.refunds.tip": "Tip",
+  "paymentDetail.refunds.overpayment": "Returned overpayment",
+  "paymentDetail.refunds.overpaymentIncluded":
+    "Includes {amount} returned overpayment",
   "paymentDetail.tipIncluded": "Includes {amount} tip",
   "paymentDetail.overpaymentTip": "Tip from the overpayment {amount}",
   "paymentDetail.canceledAtValue": "Canceled {date}",
@@ -408,6 +411,7 @@ export const enPayment = {
   "refund.dialog.cancel": "Cancel",
   "refund.dialog.confirm": "Refund {amount}",
   "refund.dialog.confirmEmpty": "Refund",
+  "refund.dialog.goodsPart": "{amount} of this is refunded as goods.",
   "refund.dialog.description":
     "A refund cannot be undone. The payment stays paid and its bill stays closed.",
   "refund.dialog.items.available": "Up to {quantity}",
@@ -444,6 +448,7 @@ export const enPayment = {
     "Today's requests to the bank are used up. Confirm the transfer by hand.",
   "paymentDetail.transaction.preimage": "Proof of payment (preimage)",
   "paymentWait.method.bitcoin": "Bitcoin",
+  "refund.state.overpayment": "Returned overpayment {amount}",
   "refund.dialog.purpose.label": "What this refund is",
   "refund.dialog.purpose.overpayment": "Returns money paid above the bill",
   "refund.dialog.purpose.goods": "Refunds goods",
