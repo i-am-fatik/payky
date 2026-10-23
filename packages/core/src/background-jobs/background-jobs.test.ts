@@ -1,5 +1,9 @@
-import { describe, expect, test } from "vitest"
+import type { ValueOf } from "type-fest"
+import { describe, expect, expectTypeOf, test } from "vitest"
 
+import type { MasterKey } from "../modules/shared/key-derivation.ts"
+
+import type { AppBackgroundJobContext } from "./background-job-types.ts"
 import {
   cashuBackgroundJobs,
   cliBackgroundJobs,
@@ -14,6 +18,7 @@ import { startQerkoPaymentConnectionJob } from "./jobs/qerko-payment-connection-
 import { startQerkoPaymentSyncJob } from "./jobs/qerko-payment-sync-job.ts"
 import { startQerkoTerminalSyncJob } from "./jobs/qerko-terminal-sync-job.ts"
 import { startSparkAccountTransactionSyncJob } from "./jobs/spark-account-transaction-sync-job.ts"
+import { startTableSelfPayPublishingJob } from "./jobs/table-self-pay-publishing-job.ts"
 
 describe("getBackgroundJobsForRuntime", () => {
   test("does not schedule the Fio or MONETA jobs in a regular web runtime", () => {
@@ -24,6 +29,7 @@ describe("getBackgroundJobsForRuntime", () => {
       startQerkoPaymentConnectionJob,
       startQerkoPaymentSyncJob,
       startLightningAddressVerifyJob,
+      startTableSelfPayPublishingJob,
     ])
   })
 
@@ -46,6 +52,7 @@ describe("getBackgroundJobsForRuntime", () => {
       startQerkoPaymentConnectionJob,
       startQerkoPaymentSyncJob,
       startLightningAddressVerifyJob,
+      startTableSelfPayPublishingJob,
     ])
   })
 
@@ -73,5 +80,14 @@ describe("getBackgroundJobsForRuntime", () => {
       startCashuAccountSyncJob
     )
     expect(cashuBackgroundJobs).toEqual([startCashuAccountSyncJob])
+  })
+})
+
+describe("AppBackgroundJobContext", () => {
+  test("hands jobs the self-pay root and never the master key", () => {
+    expectTypeOf<AppBackgroundJobContext>().toHaveProperty("tableSelfPayRoot")
+    expectTypeOf<
+      Extract<ValueOf<AppBackgroundJobContext>, MasterKey>
+    >().toBeNever()
   })
 })

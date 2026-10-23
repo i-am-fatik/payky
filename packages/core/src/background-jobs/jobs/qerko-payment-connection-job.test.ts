@@ -1,8 +1,8 @@
 import { testCreateConsole, testCreateRun } from "@evolu/common"
 import { describe, expect, test } from "vitest"
-
 import type { ConnectivityDep } from "../../deps.ts"
 import { createEetApiDep } from "../../integrations/eet/eet-client.ts"
+import { createNostrRelayClient } from "../../integrations/nostr/nostr-relay-client.ts"
 import { createQerkoApiDep } from "../../integrations/qerko/qerko-client.ts"
 import {
   createQerkoConnectionStatusDep,
@@ -123,6 +123,9 @@ const setup = async () => {
     ...connectivity,
     deviceId,
     lockManager: createInProcessLockManager(),
+    tableSelfPayRoot: new Uint8Array(32),
+    selfPayDefaultRelays: [],
+    nostrRelayClient: createNostrRelayClient(),
     console: testCreateConsole(),
     onError: (error) => {
       errors.push(error)

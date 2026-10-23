@@ -12,6 +12,7 @@ import { startQerkoPaymentConnectionJob } from "./jobs/qerko-payment-connection-
 import { startQerkoPaymentSyncJob } from "./jobs/qerko-payment-sync-job.ts"
 import { startQerkoTerminalSyncJob } from "./jobs/qerko-terminal-sync-job.ts"
 import { startSparkAccountTransactionSyncJob } from "./jobs/spark-account-transaction-sync-job.ts"
+import { startTableSelfPayPublishingJob } from "./jobs/table-self-pay-publishing-job.ts"
 
 /**
  * Right for the CLI.
@@ -29,6 +30,7 @@ const nativeBackgroundJobs = [
   startQerkoPaymentConnectionJob,
   startQerkoPaymentSyncJob,
   startLightningAddressVerifyJob,
+  startTableSelfPayPublishingJob,
 ] satisfies ReadonlyArray<AppBackgroundJob>
 
 /**
@@ -47,6 +49,7 @@ const browserBackgroundJobs = [
   startQerkoPaymentConnectionJob,
   startQerkoPaymentSyncJob,
   startLightningAddressVerifyJob,
+  startTableSelfPayPublishingJob,
 ] satisfies ReadonlyArray<AppBackgroundJob>
 
 export function getBackgroundJobsForRuntime(

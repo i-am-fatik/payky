@@ -2,9 +2,11 @@ import { sqliteTrue, testCreateRun } from "@evolu/common"
 import { describe, expect, test } from "vitest"
 import type { ConnectivityDep } from "../../deps.ts"
 import { createQuery } from "../../evolu/schema.ts"
+import { createNostrRelayClient } from "../../integrations/nostr/nostr-relay-client.ts"
 import { createQerkoApiDep } from "../../integrations/qerko/qerko-client.ts"
 import { createQerkoConnectionStatusDep } from "../../integrations/qerko/qerko-connection-status.ts"
 import { createQerkoSocketDep } from "../../integrations/qerko/qerko-socket.ts"
+import { createYadioApiDep } from "../../integrations/yadio/yadio-client.ts"
 import { createAccount } from "../../modules/account/account-actions.ts"
 import {
   addManualAmountToBill,
@@ -54,6 +56,7 @@ import {
   PositiveInteger,
   TimestampMs,
 } from "../../modules/shared/schema.ts"
+import { createSparkWalletDep } from "../../spark/spark-wallet.ts"
 import type { AppBackgroundJobContext } from "../background-job-types.ts"
 import {
   createEetReportingJob,
@@ -104,6 +107,11 @@ const startJob = async (
     ...createQerkoSocketDep(),
     ...createQerkoConnectionStatusDep(),
     ...connectivity,
+    ...createSparkWalletDep(),
+    ...createYadioApiDep(),
+    tableSelfPayRoot: new Uint8Array(32),
+    selfPayDefaultRelays: [],
+    nostrRelayClient: createNostrRelayClient(),
     deviceId,
     onError: (error) => {
       errors.push(error)
