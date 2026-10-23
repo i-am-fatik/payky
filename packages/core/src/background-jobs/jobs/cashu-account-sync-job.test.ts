@@ -7,6 +7,7 @@ import { writeCashuDefaultMint } from "../../cashu/cashu-mints.ts"
 import { createCashuWalletDep } from "../../cashu/cashu-wallet.ts"
 import type { DeviceAccountId } from "../../evolu/device-client.ts"
 import { createEetApiDep } from "../../integrations/eet/eet-client.ts"
+import { createNostrRelayClient } from "../../integrations/nostr/nostr-relay-client.ts"
 import { createYadioApiDep } from "../../integrations/yadio/yadio-client.ts"
 import { saveCashuAccount } from "../../modules/account/account-actions.ts"
 import type { DeviceId } from "../../modules/device/device-types.ts"
@@ -19,6 +20,7 @@ import {
   deriveNostrSecretKey,
 } from "../../modules/shared/key-derivation.ts"
 import { NonNegativeInteger } from "../../modules/shared/schema.ts"
+import { createSparkWalletDep } from "../../spark/spark-wallet.ts"
 import {
   createCashuTest,
   testCashuMasterKey,
@@ -46,6 +48,10 @@ const setup = async () => {
       ...fetchDep,
       ...createYadioApiDep(),
       ...createEetApiDep({ ...dateDep, ...fetchDep }),
+      ...createSparkWalletDep(),
+      tableSelfPayRoot: new Uint8Array(32),
+      selfPayDefaultRelays: [],
+      nostrRelayClient: createNostrRelayClient(),
       masterKey: testCashuMasterKey,
       nostr: relays.nostr,
       console: createConsole({ level: "silent" }),

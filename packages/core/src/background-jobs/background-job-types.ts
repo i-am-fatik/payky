@@ -8,9 +8,14 @@ import type {
   DeviceIdDep,
   EvoluOwnerDep,
   FetchDep,
+  SelfPayDefaultRelaysDep,
+  TableSelfPayRootDep,
 } from "../deps.ts"
 import type { EetApiDep } from "../integrations/eet/eet-client.ts"
+import type { NostrRelayDep } from "../integrations/nostr/nostr-relay-client.ts"
+import type { YadioApiDep } from "../integrations/yadio/yadio-client.ts"
 import type { EvoluDep } from "../modules/shared/evolu-deps.ts"
+import type { SparkWalletDep } from "../spark/spark-wallet.ts"
 
 export interface BackgroundJobOnErrorDep {
   readonly onError: (error: unknown) => void
@@ -29,7 +34,12 @@ export type BackgroundJob = Task<AsyncDisposable, never, BackgroundJobContext>
 export type AppBackgroundJobContext = BackgroundJobContext &
   DeviceIdDep &
   ConnectivityDep &
-  EetApiDep
+  EetApiDep &
+  NostrRelayDep &
+  SelfPayDefaultRelaysDep &
+  SparkWalletDep &
+  TableSelfPayRootDep &
+  YadioApiDep
 
 /** What the app's own runs add for the shared Cashu wallet. */
 export type CashuBackgroundJobContext = AppBackgroundJobContext &

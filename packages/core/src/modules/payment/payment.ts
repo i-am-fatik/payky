@@ -21,6 +21,7 @@ import {
   VariableSymbolSchema,
 } from "../shared/schema.ts"
 import { TableId } from "../table/table-types.ts"
+import { SelfPayPointerSchema } from "../table-self-pay/table-self-pay-reference-utils.ts"
 import { PaymentId } from "./payment-types.ts"
 
 export const payment = {
@@ -142,6 +143,11 @@ export const paymentCashu = {
   receiveOperationId: CashuOperationId.nullable(),
 } as const
 
+export const paymentSelfPay = {
+  id: PaymentId,
+  pointer: SelfPayPointerSchema.nullable(),
+} as const
+
 export const paymentIndexes = ((create) => [
   create("payment_billId").on("payment").column("billId"),
   create("payment_tableId").on("payment").column("tableId"),
@@ -182,3 +188,4 @@ export type PaymentBtcSparkRow = InferTable<typeof paymentBtcSpark>
 export type PaymentIbanRow = InferTable<typeof paymentIban>
 export type PaymentCardSwitchioRow = InferTable<typeof paymentCardSwitchio>
 export type PaymentCashuRow = InferTable<typeof paymentCashu>
+export type PaymentSelfPayRow = InferTable<typeof paymentSelfPay>

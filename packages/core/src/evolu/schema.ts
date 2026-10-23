@@ -67,6 +67,7 @@ import {
   paymentCashu,
   paymentIban,
   paymentIndexes,
+  paymentSelfPay,
 } from "../modules/payment/payment.ts"
 import {
   paymentLine,
@@ -83,6 +84,14 @@ import {
 } from "../modules/reconciliation-claim/reconciliation-claim.ts"
 import { refund, refundIndexes, refundLine } from "../modules/refund/refund.ts"
 import { table } from "../modules/table/table.ts"
+import {
+  billSelfPayReference,
+  selfPayAllocation,
+  selfPayRelay,
+  selfPayViewPublication,
+  selfPayViewVersion,
+  tableSelfPayIndexes,
+} from "../modules/table-self-pay/table-self-pay.ts"
 import { taxRate, taxRateIndexes } from "../modules/tax-rate/tax-rate.ts"
 import {
   withdrawal,
@@ -126,6 +135,7 @@ export const AppSchema = {
   paymentIban,
   paymentCardSwitchio,
   paymentCashu,
+  paymentSelfPay,
   paymentLine,
   paymentNumber,
   paymentLastNumber,
@@ -154,6 +164,11 @@ export const AppSchema = {
   cashuOperation,
   // Local-only: never synced (src/core/modules/cashu/cashu.ts).
   _cashuBookingCursor,
+  billSelfPayReference,
+  selfPayAllocation,
+  selfPayViewVersion,
+  selfPayViewPublication,
+  selfPayRelay,
 } as const
 
 export const createQuery = createQueryBuilder(AppSchema)
@@ -175,6 +190,7 @@ export const createAppIndexes: IndexesConfig = (create) => [
   ...refundIndexes(create),
   ...withdrawalIndexes(create),
   ...cashuIndexes(create),
+  ...tableSelfPayIndexes(create),
 ]
 
 export type EvoluSchema = typeof AppSchema

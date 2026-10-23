@@ -9,7 +9,14 @@ import { createDateDep } from "@payky/core/deps"
 import type { Evolu } from "@payky/core/evolu/schema"
 import { createEetApiDep } from "@payky/core/integrations/eet/eet-client"
 import { createNostrDep } from "@payky/core/integrations/nostr/nostr-client"
+import { createNostrRelayClient } from "@payky/core/integrations/nostr/nostr-relay-client"
+import { createYadioApiDep } from "@payky/core/integrations/yadio/yadio-client"
 import type { DeviceId } from "@payky/core/modules/device/device-types"
+import {
+  deriveTableSelfPayRoot,
+  type MasterKey,
+} from "@payky/core/modules/shared/key-derivation"
+import { createSparkWalletDep } from "@payky/core/spark/spark-wallet"
 import { useAtomValue } from "jotai"
 import { useCallback, useEffect } from "react"
 import { accountAtom } from "@/atoms/account.ts"
@@ -21,6 +28,7 @@ import {
 } from "@/atoms/evolu.ts"
 import { appEnv } from "@/core/app-env.ts"
 import { useConsole } from "@/hooks/use-console.ts"
+import { createE2eSparkWalletDep } from "@/platform/e2e-spark-wallet.ts"
 import {
   createConnectivityDep,
   createFetchDep,
@@ -32,10 +40,12 @@ type Console = ReturnType<typeof useConsole>
 const createAppJobDeps = ({
   evolu,
   deviceId,
+  masterKey,
   console,
 }: {
   readonly evolu: Evolu
   readonly deviceId: DeviceId
+  readonly masterKey: MasterKey
   readonly console: Console
 }) => {
   const dateDep = createDateDep()
@@ -51,6 +61,11 @@ const createAppJobDeps = ({
       { ...dateDep, ...fetchDep },
       { productionUrl: appEnv.VITE_PAYKY_EET_PRODUCTION_URL }
     ),
+    ...(createE2eSparkWalletDep() ?? createSparkWalletDep()),
+    ...createYadioApiDep(),
+    tableSelfPayRoot: deriveTableSelfPayRoot(masterKey),
+    selfPayDefaultRelays: appEnv.VITE_PAYKY_SELF_PAY_RELAYS,
+    nostrRelayClient: createNostrRelayClient(),
     lockManager: navigator.locks,
     console,
     onError: (error: unknown) => {
@@ -123,8 +138,11 @@ export function AppBackgroundJobs() {
   const account = useAtomValue(accountAtom)
   const console = useConsole()
   const deviceId = account.device.id
+  const { masterKey } = account
   const start = useCallback(() => {
-    const run = createRun(createAppJobDeps({ evolu, deviceId, console }))
+    const run = createRun(
+      createAppJobDeps({ evolu, deviceId, masterKey, console })
+    )
     return {
       run,
       jobs: run.ok(
@@ -133,7 +151,7 @@ export function AppBackgroundJobs() {
         )
       ),
     }
-  }, [console, deviceId, evolu])
+  }, [console, deviceId, evolu, masterKey])
 
   useBackgroundJobs({ isDemo: account.demo !== null, console, start })
 
@@ -156,7 +174,7 @@ export function CashuBackgroundJobs() {
   const { masterKey } = account
   const start = useCallback(() => {
     const run = createRun({
-      ...createAppJobDeps({ evolu, deviceId, console }),
+      ...createAppJobDeps({ evolu, deviceId, masterKey, console }),
       deviceEvolu,
       masterKey,
       ...createNostrDep(appEnv.VITE_PAYKY_NOSTR_RELAYS),
