@@ -32,11 +32,15 @@ repair rows created before this batching existed.
 | `background-jobs/jobs/fio-account-transaction-sync-job.ts` | The FIO job. |
 | `background-jobs/jobs/spark-account-transaction-sync-job.ts` | The Spark job. |
 | `account-transaction/account-transaction-actions.ts` | `createAccountTransaction` — the record step. |
-| `reconciliation-claim/reconciliation-claim-actions.ts` | `reconcileAccountTransaction` — the reconcile step. |
+| `reconciliation-claim/reconciliation-claim-actions.ts` | `loadAutomaticReconciliation` and `upsertAutomaticReconciliationRows`, the reconcile step, and `reconcileAccountTransaction`, the standalone one. |
 | `integrations/fio/fio-client.ts` | FIO HTTP client. |
 | `spark/spark-wallet.ts` | Pooled, ref-counted Spark SDK wrapper. |
 | `account/account.ts`, `account-spark-queries.ts` | `sparkAccountSyncPointer` table + query. |
 | `components/app/app-background-jobs.tsx` | Starts/stops jobs once per app mount. |
+| `table-self-pay/table-self-pay-actions.ts` | `loadSelfPayArrival`, the self-pay candidate, which looks up the selection a payment points to. |
+| `table-self-pay/table-self-pay-pointer-utils.ts` | The pointer a payment carries: the selection's hash, its keys and its event. |
+| `background-jobs/jobs/self-pay-pointer-job.ts` | Asks again for selections that were not found yet. |
+| `background-jobs/jobs/table-self-pay-publishing-job.ts` | Publishes each self-pay table's view to Nostr relays. |
 
 ## Parameters
 
@@ -107,15 +111,133 @@ from the mint and quote (or the token text), the claim stops when someone else
 got there first (`cashu/0004`), and the booked transaction's id derives from
 the operation id.
 
+## Table self-pay
+
+Why it is built this way is in
+[table-self-pay-design.md](table-self-pay-design.md).
+
+A guest paying at the table never asks a device for anything, so no
+`payment` exists before the money does. The guest publishes what they pay
+for to the relays, and the payment points to it. When none of the three candidates
+above matches, both the new-transaction path and `reconcileAccountTransaction`
+try a fourth, `loadSelfPayArrival`:
+
+| Rail | Bill reference from | Credited amount | Also required |
+|---|---|---|---|
+| bank | the variable symbol | the transfer's amount | the bill's currency |
+| Lightning | the memo of the invoice, `PK1 <ref> <pointer> A<amount> R<msat per unit>.<valid from>.<MAC>` | `min(amount, sats at the named rate)` | the rate's MAC, the invoice's own timestamp within one hour of the rate's start, and the money arriving at most ten minutes after that hour |
+
+On both rails the reference must name exactly one stored
+`billSelfPayReference`, the bill must know its `deviceId`, and the credit
+must reach the self-pay minimum, 1.00 CZK, 0.05 EUR or 0.05 USD, or cover
+everything the bill still owes (table-self-pay/0011). Anything else stays
+unclaimed for staff.
+The rate's MAC needs the table self-pay key, derived from the master key and
+handed only to the app's background jobs, so the CLI leaves Lightning
+self-pay to the app devices.
+
+A match writes, in the transaction's own batch on the sync path: the
+`payment` (the bill's device, the credited amount, the tip), its
+`paymentIban` or `paymentBtc` + `paymentBtcLightning` row, its
+`paymentSelfPay` pointer, a `selfPayAllocation` per paid line, the claim and
+the bill's `closedAt` cache. The payment id derives from
+`self-pay:{accountTransactionId}`, and every value but a bank claim's
+`claimedAt` and the `closedAt` cache, which take this device's clock, comes
+from the transaction, its message or memo, the selection it points to, the
+bill and its stored versions,
+so two devices recording the same arrival write the same rows apart from
+those two values. `claimedAt` is the sale time EET reports (`docs/eet.md`): for
+Lightning the transaction's `occurredAt`, when Spark received the money, and
+for a bank transfer the time the device matched it, because FIO books only
+a date and its midnight would come before the guest paid. The bank message
+`PK1<pointer>`, 35 characters, travels in FIO's recipient message, which
+`accountTransactionIban` keeps in its own `recipientMessage` column. The memo
+is at most 108 bytes.
+
+### The pointer
+
+The pointer is 32 base32 characters, the first 160 bits of SHA-256 over the
+selection the guest published (table-self-pay/0020). The device derives the
+event's author from the pointer and the account's selection key, asks the
+active and default relays for that author only (`lookUpSelfPaySelection`),
+and keeps a selection only when its content hashes to the pointer and it names
+the bill the reference names. The selection carries the split (lines with a
+fraction each, lines with one common fraction, the rest of the bill, 1/N of
+the bill, an amount) and the version of the bill the guest saw. The device
+takes that version from the `selfPayViewVersion` rows of the bill or, while
+the bill is open at a table, the bill as it stands, prices the share with
+`calculateSelfPayShare`, the function the guest page used, and allocates it to
+the lines the bill still has. The tip is what the credit holds above the
+share. A credit below the share, or a selection that names another version
+of the bill, counts toward the bill without allocation and without a tip.
+Allocations mark lines paid and never change coverage.
+
+When no relay returns the selection, the transaction stays unclaimed and
+`self-pay-pointer-job.ts` asks again at 1, 3, 6 and 11 minutes after the device
+first saw it. After 10 minutes the money counts toward the bill without
+allocation. A pointer cut short does not parse and counts at once.
+
+### Publishing the view
+
+`table-self-pay-publishing-job.ts` runs on native and browser runtimes.
+Two seconds after anything at a self-pay table changes, it projects the
+table's open bills into a view, stores each bill of it as a
+`selfPayViewVersion` whose id comes from its content, then encrypts the
+view under the table's view key and publishes it to every configured relay
+as one replaceable event. A view that would not fit 60 KiB lists the bills
+with the most lines by their totals only, and leaves out the newest bills
+when even that does not fit. Versions are deleted 7 days after their bill
+closed or was canceled. The bill's reference stays, but money naming it that
+arrives later stays unmatched. The event's `created_at` is the newest
+`createdAt` or `updatedAt` among every row that feeds the view, so a device
+behind on sync publishes an older version and cannot displace a fresher one,
+and equal views from two devices are one event. When the view or its relays
+change without a newer row, it is one second after this device's last event
+for that view, which the device keeps across restarts. While a table has an open bill, a separate liveness event
+every five minutes names the view its device published last, which the guest
+page counts as confirmed only when it shows that view or a newer one
+(table-self-pay/0014), and carries the signed Lightning rate when the view offers
+Lightning, valid for one hour from its start. Guests ask relays only for events the table's key signed. Switching self-pay off
+publishes a view telling guests to pay with staff, and regenerating the QR
+publishes that view under every earlier key of the table.
+
 ## Known limitations
 
 | # | Issue | Status |
 |---|---|---|
 | 1 | Spark transfer with no Lightning/Spark invoice | open by design — never recorded |
 | 2 | Ambiguous candidate ties | open — `payment.id` order decides |
+| 3 | Two devices publishing different views of one table within the same second | open — relays keep the lower event id until the next change |
+| 4 | A selection naming a version another device published and this one has not synced | open, rare |
+| 5 | A view that changed without a newer row, published by another device | open, until the table changes again |
+| 6 | A view nobody changed for 30 days | open by design, the event expires |
 
 1. **By design**, not a bug: `assertHasSparkIdentifier` is a domain
    invariant enforced inside `createAccountTransaction` itself.
 
 2. **Ties.** IBAN candidate: same VS/SS/amount on two open payments. Cash
    candidate: same amount (currently unreachable, see the table above).
+
+3. **Same-second views.** A view's version has one-second resolution. If a
+   device behind on sync publishes within the same second as a fresh one,
+   relays break the tie by event id, and the stale view can stay until the
+   table changes again.
+
+4. **Unsynced version.** The device also tries the bill as it stands while
+   it is open at its table, which matches whenever nothing changed since the
+   guest looked. Otherwise the
+   money counts toward the bill without allocation.
+
+5. **Bump kept per device.** When a view changes without a newer row, for
+   example when Spark becomes unreachable and the view drops Lightning, or a
+   bill moves to another table, the device publishes it one second above its
+   own last event. It stores the second of every event it publishes as a
+   `selfPayViewPublication` row, so after a restart it goes on from there.
+   Another device knows only its own bumps, so it publishes the same view at
+   its row version, below the bumped event, and relays keep the bumped one
+   until the table changes again. Following another device's bump would let
+   a device behind on sync displace a fresher view.
+
+6. **Idle views expire.** A view's event expires 30 days after its version.
+   A table nobody changed for 30 days tells guests that its bill is not
+   available until its next change.

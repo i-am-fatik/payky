@@ -235,6 +235,7 @@ bun run test:watch
 ## Project Layout
 
 - `apps/web-app/src/main.tsx` is the browser entry point.
+- `apps/web-app/src/guest-main.tsx` is the entry of the table self-pay guest page.
 - `apps/web-app/src/App.tsx` wires top-level providers and the TanStack Router provider.
 - `apps/web-app/src/routes` contains file-based route definitions.
 - `apps/web-app/src/components/ui` contains reusable shadcn-style UI primitives built on
@@ -318,6 +319,14 @@ client. The Cashu seed and the Linky owner are Linky's own derivations
 (`packages/identity/src/derivationPaths.ts` there), so a master key moved
 between the two apps opens the same Cashu wallet; the cross-app vectors in
 `key-derivation-cross-app.test.ts` pin them.
+
+Table self-pay keys come from `S` outside BIP-85, through HKDF-SHA256 with a
+label as `info` (`packages/core/src/modules/shared/key-derivation.ts`). The self-pay
+root uses `payky/table-self-pay/v1`. From the root, each table's secret uses
+`table:<tableId>:<epoch>` and the Lightning rate key `rate`. From a table's
+secret, its signing and view keys use `sign` and `view`. Background jobs hold
+only the root (`docs/decisions/table-self-pay/0009`). The labels must never
+change, since printed stickers carry keys derived from them.
 
 `S` itself is backed up as a single [SLIP-39](https://github.com/satoshilabs/slips/blob/master/slip-0039.md)
 20-word recovery mnemonic (`packages/core/src/modules/shared/key-derivation.ts`, via
