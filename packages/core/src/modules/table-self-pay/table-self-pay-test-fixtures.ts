@@ -1,28 +1,39 @@
-import { testCreateConsole, testCreateRun } from "@evolu/common"
+import { sqliteTrue, testCreateConsole, testCreateRun } from "@evolu/common"
+import { createQuery } from "../../evolu/schema.ts"
 import { createNostrRelayClient } from "../../integrations/nostr/nostr-relay-client.ts"
 import { createFakeNostrRelay } from "../../integrations/nostr/nostr-relay-test-fixtures.ts"
 import { createInProcessLockManager } from "../../runtime/in-process-lock-manager.ts"
 import { createTestDateDep } from "../../testing/date-dep.ts"
 import { createEvoluTest } from "../../testing/evolu.ts"
 import { createAccount } from "../account/account-actions.ts"
+import { createAccountTransaction } from "../account-transaction/account-transaction-actions.ts"
 import { addManualAmountToBill, createBill } from "../bill/bill-actions.ts"
 import type { BillId } from "../bill/bill-types.ts"
 import type { DeviceId } from "../device/device-types.ts"
+import { reconcileAccountTransaction } from "../reconciliation-claim/reconciliation-claim-actions.ts"
 import {
   createRowId,
   runMutationWithCompletion,
 } from "../shared/evolu-utils.ts"
 import {
+  deriveSelfPayRateKey,
+  deriveSelfPaySelectionKey,
   deriveTableSelfPayRoot,
   MasterKey,
   SparkSecret,
 } from "../shared/key-derivation.ts"
+import { createTestInvoice } from "../shared/lightning-invoice-test-fixtures.ts"
 import {
   type FiatCurrency,
   IbanSchema,
+  Integer,
   NonEmptyString255,
+  NonEmptyStringSchema,
   NonNegativeInteger,
   PositiveInteger,
+  type SpecificSymbol,
+  type TimestampMs,
+  VariableSymbol,
   WssUrl,
 } from "../shared/schema.ts"
 import { createTableAtEnd } from "../table/table-actions.ts"
@@ -32,11 +43,24 @@ import {
   saveTableSelfPayViewSnapshot,
   upsertBillSelfPayReferences,
 } from "./table-self-pay-actions.ts"
+import {
+  createSelfPaySelectionEvent,
+  createSelfPayShareSelectionText,
+} from "./table-self-pay-pointer-utils.ts"
 import { selfPayTablesQuery } from "./table-self-pay-queries.ts"
 import {
+  createSelfPayRate,
+  signSelfPayRate,
+} from "./table-self-pay-rate-utils.ts"
+import {
   deriveBillSelfPayReference,
+  type SelfPayMemoRate,
   type SelfPayReference,
 } from "./table-self-pay-reference-utils.ts"
+import type {
+  SelfPayShareBill,
+  SelfPaySplit,
+} from "./table-self-pay-share-utils.ts"
 
 export const selfPayTestMasterKey = MasterKey(
   "000102030405060708090a0b0c0d0e0f"
@@ -188,3 +212,159 @@ export const publishSelfPayTestView = async (
   await run.ok(saveTableSelfPayViewSnapshot(snapshot))
   return snapshot
 }
+
+export const createSelfPayTestSelection = (
+  context: SelfPayTestContext,
+  bill: SelfPayShareBill & { readonly reference: SelfPayReference },
+  split: SelfPaySplit = { kind: "remainder" }
+) =>
+  createSelfPaySelectionEvent({
+    selectionText: createSelfPayShareSelectionText({ bill, split }),
+    selectionKey: deriveSelfPaySelectionKey(context.deps.tableSelfPayRoot),
+    createdAt: Math.floor(context.clock.date.now().getTime() / 1000),
+  })
+
+export const publishSelfPayTestSelection = async (
+  context: SelfPayTestContext,
+  bill: SelfPayShareBill & { readonly reference: SelfPayReference },
+  split: SelfPaySplit = { kind: "remainder" }
+) => {
+  const { pointer, event } = createSelfPayTestSelection(context, bill, split)
+  await context.deps.nostrRelayClient.publish(
+    context.deps.selfPayDefaultRelays,
+    event
+  )
+  return pointer
+}
+
+export const selectSelfPayTestShare = async (
+  context: SelfPayTestContext,
+  reference: SelfPayReference,
+  split: SelfPaySplit = { kind: "remainder" }
+) => {
+  const { view } = await publishSelfPayTestView(context)
+  const bill = view.bills.find((candidate) => candidate.reference === reference)
+  if (bill === undefined) throw new Error("Expected the bill in the view.")
+  return {
+    bill,
+    pointer: await publishSelfPayTestSelection(context, bill, split),
+  }
+}
+
+export const receiveBankTransfer = async (
+  context: SelfPayTestContext,
+  {
+    amount,
+    variableSymbol,
+    specificSymbol = null,
+    recipientMessage = null,
+    bankReference = createRowId<"Transfer">(),
+    occurredAt = context.clock.date.now().getTime(),
+  }: {
+    readonly amount: number
+    readonly variableSymbol: string
+    readonly specificSymbol?: SpecificSymbol | null
+    readonly recipientMessage?: string | null
+    readonly bankReference?: string
+    readonly occurredAt?: TimestampMs
+  }
+) => {
+  await using run = testCreateRun(context.deps)
+  const accountTransactionId = await run.ok(
+    createAccountTransaction({
+      accountId: context.ibanAccountId,
+      amount: Integer(amount),
+      currency: "CZK",
+      occurredAt,
+      note: null,
+      internalTransferGroupId: null,
+      source: { deviceId: null, source: "auto" },
+      iban: {
+        variableSymbol: VariableSymbol(variableSymbol),
+        constantSymbol: null,
+        specificSymbol,
+        bankReference: NonEmptyString255(bankReference),
+        recipientMessage:
+          recipientMessage === null
+            ? null
+            : NonEmptyStringSchema.decode(recipientMessage),
+      },
+    })
+  )
+  const paymentId = await run.ok(
+    reconcileAccountTransaction(accountTransactionId)
+  )
+  return { accountTransactionId, paymentId }
+}
+
+export const createTestLightningInvoice = ({
+  amountSats,
+  memo,
+  createdAt,
+}: {
+  readonly amountSats: number
+  readonly memo: string
+  readonly createdAt: number
+}): string =>
+  createTestInvoice({
+    hrp: `lnbc${amountSats * 10}n`,
+    timestamp: createdAt,
+    description: memo,
+  })
+
+export const signTestSelfPayRate = (
+  now: Date,
+  currency: FiatCurrency = "CZK"
+): SelfPayMemoRate =>
+  signSelfPayRate(
+    deriveSelfPayRateKey(deriveTableSelfPayRoot(selfPayTestMasterKey)),
+    createSelfPayRate({ currency, exchangeRate: 2_500_000, now })
+  )
+
+export const receiveLightningPayment = async (
+  context: SelfPayTestContext,
+  {
+    amountSats,
+    lnInvoice,
+    occurredAt = context.clock.date.now().getTime(),
+  }: {
+    readonly amountSats: number
+    readonly lnInvoice: string
+    readonly occurredAt?: TimestampMs
+  }
+) => {
+  await using run = testCreateRun(context.deps)
+  const accountTransactionId = await run.ok(
+    createAccountTransaction({
+      accountId: context.sparkAccountId,
+      amount: Integer(amountSats),
+      currency: "BTC",
+      occurredAt,
+      note: null,
+      internalTransferGroupId: null,
+      source: { deviceId: null, source: "auto" },
+      spark: {
+        sparkTransferId: NonEmptyStringSchema.decode(createRowId<"Transfer">()),
+        lightning: {
+          lnInvoice: NonEmptyStringSchema.decode(lnInvoice),
+          preImage: null,
+          paymentHash: null,
+        },
+      },
+    })
+  )
+  const paymentId = await run.ok(
+    reconcileAccountTransaction(accountTransactionId)
+  )
+  return { accountTransactionId, paymentId }
+}
+
+export const selfPayPointersByBillIdQuery = (billId: BillId) =>
+  createQuery((db) =>
+    db
+      .selectFrom("paymentSelfPay")
+      .innerJoin("payment", "payment.id", "paymentSelfPay.id")
+      .select(["paymentSelfPay.pointer"])
+      .where("payment.billId", "=", billId)
+      .where("paymentSelfPay.isDeleted", "is not", sqliteTrue)
+  )

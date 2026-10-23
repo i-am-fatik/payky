@@ -17,6 +17,7 @@ import { startMonetaAccountTransactionSyncJob } from "./jobs/moneta-account-tran
 import { startQerkoPaymentConnectionJob } from "./jobs/qerko-payment-connection-job.ts"
 import { startQerkoPaymentSyncJob } from "./jobs/qerko-payment-sync-job.ts"
 import { startQerkoTerminalSyncJob } from "./jobs/qerko-terminal-sync-job.ts"
+import { startSelfPayPointerJob } from "./jobs/self-pay-pointer-job.ts"
 import { startSparkAccountTransactionSyncJob } from "./jobs/spark-account-transaction-sync-job.ts"
 import { startTableSelfPayPublishingJob } from "./jobs/table-self-pay-publishing-job.ts"
 
@@ -30,6 +31,7 @@ describe("getBackgroundJobsForRuntime", () => {
       startQerkoPaymentSyncJob,
       startLightningAddressVerifyJob,
       startTableSelfPayPublishingJob,
+      startSelfPayPointerJob,
     ])
   })
 
@@ -53,6 +55,7 @@ describe("getBackgroundJobsForRuntime", () => {
       startQerkoPaymentSyncJob,
       startLightningAddressVerifyJob,
       startTableSelfPayPublishingJob,
+      startSelfPayPointerJob,
     ])
   })
 

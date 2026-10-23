@@ -1,6 +1,11 @@
-import { type ConsoleDep, ok, type Task } from "@evolu/common"
+import {
+  type ConsoleDep,
+  type LockManagerDep,
+  ok,
+  type Task,
+} from "@evolu/common"
 
-import type { DateDep, EvoluOwnerDep } from "../../deps.ts"
+import type { EvoluOwnerDep } from "../../deps.ts"
 import type { AccountId } from "../account/account-types.ts"
 import {
   type CreateAccountTransactionInput,
@@ -13,13 +18,18 @@ import type { PaymentId } from "../payment/payment-types.ts"
 import type { EvoluDep } from "../shared/evolu-deps.ts"
 import { runMutationWithCompletion } from "../shared/evolu-utils.ts"
 import type { NonEmptyString255 } from "../shared/schema.ts"
+import type { SelfPayArrivalDeps } from "../table-self-pay/table-self-pay-actions.ts"
 import {
   type AutomaticReconciliation,
   loadAutomaticReconciliation,
   reconcileAccountTransaction,
+  SELF_PAY_ARRIVAL_LOCK,
   upsertAutomaticReconciliationRows,
 } from "./reconciliation-claim-actions.ts"
-import { ibanTransactionsWithReconciliationCandidateQuery } from "./reconciliation-claim-queries.ts"
+import {
+  ibanTransactionsNamingSelfPayQuery,
+  ibanTransactionsWithReconciliationCandidateQuery,
+} from "./reconciliation-claim-queries.ts"
 import type {
   BankTransaction,
   RecordedBankTransaction,
@@ -138,7 +148,7 @@ export const recordBankTransactions =
   }): Task<
     RecordedBankTransactions,
     never,
-    EvoluDep & EvoluOwnerDep & DateDep & ConsoleDep
+    EvoluOwnerDep & ConsoleDep & LockManagerDep & SelfPayArrivalDeps
   > =>
   async (run) => {
     let pending: PendingBankTransaction[] = []
@@ -170,12 +180,17 @@ export const recordBankTransactions =
 
       const input = toAccountTransactionInput(accountId, transaction)
       const rows = computeAccountTransactionRows(input, run.deps.date.now())
-      const reconciliation = await run.ok(
-        loadAutomaticReconciliation(input, rows)
+      const claim = await run.deps.lockManager.request(
+        SELF_PAY_ARRIVAL_LOCK,
+        async () => {
+          const reconciliation = await run.ok(
+            loadAutomaticReconciliation(input, rows)
+          )
+          pending.push({ rows, reconciliation })
+          if (reconciliation !== null) await flush()
+          return reconciliation?.claim ?? null
+        }
       )
-      pending.push({ rows, reconciliation })
-
-      const claim = reconciliation?.claim ?? null
       if (claim !== null) {
         claimedPaymentIds.push(claim.paymentId)
         run.deps.console.info(
@@ -188,9 +203,7 @@ export const recordBankTransactions =
           }
         )
       }
-      if (claim !== null || pending.length >= BANK_TRANSACTION_BATCH_SIZE) {
-        await flush()
-      }
+      if (pending.length >= BANK_TRANSACTION_BATCH_SIZE) await flush()
     }
     await flush()
 
@@ -214,16 +227,24 @@ export const reconcileUnclaimedBankTransactions =
   }): Task<
     ReadonlyArray<PaymentId>,
     never,
-    EvoluDep & EvoluOwnerDep & DateDep
+    EvoluOwnerDep & LockManagerDep & SelfPayArrivalDeps
   > =>
   async (run) => {
     if (accountTransactionIds.length === 0) return ok([])
 
-    const matched = await run.deps.evolu.loadQuery(
-      ibanTransactionsWithReconciliationCandidateQuery(accountTransactionIds)
+    const [matched, namingSelfPay] = await Promise.all(
+      run.deps.evolu.loadQueries([
+        ibanTransactionsWithReconciliationCandidateQuery(accountTransactionIds),
+        ibanTransactionsNamingSelfPayQuery(accountTransactionIds),
+      ])
+    )
+    const toReconcile = new Set(
+      [...matched, ...namingSelfPay].map(
+        ({ accountTransactionId }) => accountTransactionId
+      )
     )
     const claimedPaymentIds: PaymentId[] = []
-    for (const { accountTransactionId } of matched) {
+    for (const accountTransactionId of toReconcile) {
       if (isStopped()) break
       const paymentId = await run.ok(
         reconcileAccountTransaction(accountTransactionId)
@@ -255,5 +276,6 @@ const toAccountTransactionInput = (
     constantSymbol: transaction.constantSymbol,
     specificSymbol: transaction.specificSymbol,
     bankReference: transaction.bankReference,
+    recipientMessage: transaction.recipientMessage,
   },
 })
