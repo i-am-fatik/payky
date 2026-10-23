@@ -160,6 +160,7 @@
         "@evolu/common": "8.26.0",
         "@evolu/sqlite-wasm": "3.54.1-build3",
         "@evolu/web": "3.7.0",
+        "@noble/hashes": "2.4.0",
         "@payky/app-shared": "workspace:*",
         "@payky/core": "workspace:*",
         "@payky/web-shared": "workspace:*",
