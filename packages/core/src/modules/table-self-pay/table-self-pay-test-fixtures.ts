@@ -79,9 +79,11 @@ export const createSelfPayTestContext = async ({
   const { evolu } = testEvolu
   const clock = createTestDateDep(now)
   const relay = createFakeNostrRelay()
+  const deviceId = createRowId<"Device">()
   const deps = {
     evolu,
     evoluOwner: evolu.appOwner,
+    deviceId,
     date: clock.date,
     tableSelfPayRoot: selfPayTestRoot,
     selfPayDefaultRelays: [WssUrl("wss://relay.test")],
@@ -96,7 +98,6 @@ export const createSelfPayTestContext = async ({
       },
     },
   }
-  const deviceId = createRowId<"Device">()
 
   await using run = testCreateRun(deps)
   const ibanAccountId = await run.ok(

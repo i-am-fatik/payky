@@ -394,6 +394,14 @@ export const tableSelfPayVersionQuery = (tableId: TableId) =>
                 "monetaPlugin.updatedAt as updatedAt",
               ])
           )
+          .unionAll(
+            eb
+              .selectFrom("appSettings")
+              .select([
+                "appSettings.createdAt as createdAt",
+                "appSettings.updatedAt as updatedAt",
+              ])
+          )
           .as("changes")
       )
       .select((eb) => [
