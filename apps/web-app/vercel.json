@@ -1,6 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "t\\.finito\\.fit" }],
+      "destination": "https://finito.fit",
+      "permanent": false
+    }
+  ],
   "headers": [
     {
       "source": "/t(\\.html)?",

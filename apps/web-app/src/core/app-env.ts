@@ -44,7 +44,7 @@ export const appEnv = createEnv({
       .default(["wss://evolu.eu.freedomrelay.dev", "wss://evolu.linky.fit"]),
     // Unset leaves error reporting unavailable, whatever the device opted.
     VITE_SENTRY_DSN: z.string().optional(),
-    VITE_PAYKY_SELF_PAY_ORIGIN: z.url().default("https://t.payky.me"),
+    VITE_PAYKY_SELF_PAY_ORIGIN: z.url().default(appBrand.selfPayOrigin),
     VITE_PAYKY_SELF_PAY_RELAYS: SelfPayRelaysSchema,
   },
   runtimeEnv: import.meta.env,

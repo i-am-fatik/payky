@@ -34,7 +34,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: sticker(root, "table-5", 2),
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,
@@ -43,7 +43,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: sticker(root, "table-6", 0),
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,
@@ -55,7 +55,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: sticker(root, "table-5", 1),
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,
@@ -69,7 +69,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: sticker(root, "table-5", 2),
-        origin,
+        origins: [origin],
         addressRelays: ownRelays,
         tables,
         root,
@@ -78,7 +78,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: sticker(root, "table-5", 2, ownRelays),
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,
@@ -87,7 +87,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: sticker(root, "table-5", 2, ownRelays),
-        origin,
+        origins: [origin],
         addressRelays: ownRelays,
         tables,
         root,
@@ -109,7 +109,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: sticker(otherRoot, "table-5", 2),
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,
@@ -118,12 +118,30 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: withOurPublicKey,
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,
       })
     ).toEqual({ kind: "foreign" })
+  })
+
+  test("names the table of a sticker on another brand's guest host", () => {
+    const otherBrandOrigin = "https://t.other.example"
+    const otherBrandSticker = createTableSelfPayAddress(otherBrandOrigin, {
+      ...deriveTableSelfPayKeys(root, "table-5", 2),
+      relays: [],
+    })
+
+    expect(
+      checkTableSelfPaySticker({
+        scanned: otherBrandSticker,
+        origins: [origin, otherBrandOrigin],
+        addressRelays: [],
+        tables,
+        root,
+      })
+    ).toEqual({ kind: "current", tableName: "Table 5" })
   })
 
   test("reports our keys behind another address as foreign", () => {
@@ -135,7 +153,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: lookalike,
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,
@@ -147,7 +165,7 @@ describe("checkTableSelfPaySticker", () => {
     expect(
       checkTableSelfPaySticker({
         scanned: "8594000000017",
-        origin,
+        origins: [origin],
         addressRelays: [],
         tables,
         root,

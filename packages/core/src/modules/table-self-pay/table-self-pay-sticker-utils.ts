@@ -15,13 +15,13 @@ export type TableSelfPayStickerCheck =
 
 export const checkTableSelfPaySticker = ({
   scanned,
-  origin,
+  origins,
   addressRelays,
   tables,
   root,
 }: {
   readonly scanned: string
-  readonly origin: string
+  readonly origins: ReadonlyArray<string>
   readonly addressRelays: ReadonlyArray<WssUrl>
   readonly tables: ReadonlyArray<{
     readonly id: string
@@ -32,7 +32,8 @@ export const checkTableSelfPaySticker = ({
 }): TableSelfPayStickerCheck => {
   const sticker = parseTableSelfPayAddress(scanned)
   if (sticker === null) return { kind: "notTableCode" }
-  if (new URL(scanned).origin !== new URL(origin).origin) {
+  const scannedOrigin = new URL(scanned).origin
+  if (!origins.some((origin) => new URL(origin).origin === scannedOrigin)) {
     return { kind: "foreign" }
   }
 

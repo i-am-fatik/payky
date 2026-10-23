@@ -1,3 +1,4 @@
+import { brandName, brandOfSelfPayHost } from "@payky/app-shared/brand"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
@@ -11,6 +12,7 @@ if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
   document.documentElement.classList.add("dark")
 }
 history.scrollRestoration = "manual"
+document.title = brandName(brandOfSelfPayHost(window.location.host))
 
 const rootElement = document.getElementById("root")
 

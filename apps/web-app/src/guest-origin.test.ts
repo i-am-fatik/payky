@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import { brandSelfPayOrigins } from "@payky/app-shared/brand"
 import { describe, expect, test } from "vitest"
 
 import { appEnv } from "@/core/app-env.ts"
@@ -10,6 +11,11 @@ interface HostCondition {
 }
 
 interface VercelConfig {
+  readonly redirects?: ReadonlyArray<{
+    readonly source: string
+    readonly destination: string
+    readonly has?: ReadonlyArray<HostCondition>
+  }>
   readonly headers: ReadonlyArray<{
     readonly source: string
     readonly has?: ReadonlyArray<HostCondition>
@@ -28,6 +34,12 @@ interface VercelConfig {
 
 const vercel: VercelConfig = JSON.parse(
   readFileSync(path.resolve(import.meta.dirname, "../vercel.json"), "utf8")
+)
+const finitoVercel: VercelConfig = JSON.parse(
+  readFileSync(
+    path.resolve(import.meta.dirname, "../../native-app/vercel.json"),
+    "utf8"
+  )
 )
 
 const matchesHost = (condition: HostCondition | undefined, host: string) =>
@@ -80,5 +92,32 @@ describe("the guest page's origin", () => {
       key: "Content-Security-Policy",
       value: "frame-ancestors 'none'",
     })
+  })
+
+  test("is served on every brand's guest host and on no app's origin", () => {
+    const toGuestPage = vercel.rewrites.find(
+      ({ destination }) => destination === "/t.html"
+    )
+    const guestHosts = brandSelfPayOrigins.map((origin) => new URL(origin).host)
+
+    expect(
+      guestHosts.every((host) => matchesHost(toGuestPage?.has?.[0], host))
+    ).toBe(true)
+    expect(matchesHost(toGuestPage?.has?.[0], "app.finito.fit")).toBe(false)
+    expect(
+      finitoVercel.rewrites.some(({ destination }) =>
+        destination.startsWith("/t.html")
+      )
+    ).toBe(false)
+  })
+
+  test("sends a visitor of Finito's guest host to Finito's site", () => {
+    const home = vercel.redirects?.find(
+      ({ source, has }) =>
+        source === "/" && matchesHost(has?.[0], "t.finito.fit")
+    )
+
+    expect(home?.destination).toBe("https://finito.fit")
+    expect(matchesHost(home?.has?.[0], "t.payky.me")).toBe(false)
   })
 })
