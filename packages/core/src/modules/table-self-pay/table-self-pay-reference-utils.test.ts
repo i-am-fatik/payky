@@ -50,7 +50,7 @@ describe("deriveBillSelfPayReference", () => {
 
   test("never shares a reference with an order, whose references start with 9", () => {
     for (let index = 0; index < 2000; index++) {
-      const reference = deriveOrderSelfPayReference(`bill-${index}`)
+      const reference = deriveOrderSelfPayReference(`pointer-${index}`)
       expect(reference).toMatch(/^9\d{9}$/u)
       expect(isOrderSelfPayReference(reference)).toBe(true)
     }

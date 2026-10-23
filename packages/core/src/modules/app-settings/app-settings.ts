@@ -1,9 +1,11 @@
 import { SqliteBoolean, sqliteTrue } from "@evolu/common"
 import { z } from "zod"
+import { DeviceId } from "../device/device-types.ts"
 import {
   FiatCurrencySchema,
   type InferTable,
   NonEmptyString255Schema,
+  SqliteTrueSchema,
 } from "../shared/schema.ts"
 import {
   AppSettingsId,
@@ -26,6 +28,9 @@ export const appSettings = {
    */
   enabledHomeModesJson: z.string().nullable(),
   selfPayGuestName: NonEmptyString255Schema.nullable(),
+  selfPayBillsHidden: SqliteTrueSchema.nullable(),
+  menuOrdering: SqliteTrueSchema.nullable(),
+  orderDeviceId: DeviceId.nullable(),
 } as const
 
 export type AppSettingsRow = InferTable<typeof appSettings>

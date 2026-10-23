@@ -60,6 +60,11 @@ import {
 import { item, itemIndexes } from "../modules/item/item.ts"
 import { legalEntity } from "../modules/legal-entity/legal-entity.ts"
 import {
+  menuOrder,
+  menuOrderIndexes,
+  menuVersion,
+} from "../modules/menu-order/menu-order.ts"
+import {
   overpaymentResolution,
   overpaymentResolutionIndexes,
 } from "../modules/overpayment-resolution/overpayment-resolution.ts"
@@ -179,6 +184,8 @@ export const AppSchema = {
   selfPayViewVersion,
   selfPayViewPublication,
   selfPayRelay,
+  menuVersion,
+  menuOrder,
 } as const
 
 export const createQuery = createQueryBuilder(AppSchema)
@@ -202,6 +209,7 @@ export const createAppIndexes: IndexesConfig = (create) => [
   ...withdrawalIndexes(create),
   ...cashuIndexes(create),
   ...tableSelfPayIndexes(create),
+  ...menuOrderIndexes(create),
 ]
 
 export type EvoluSchema = typeof AppSchema

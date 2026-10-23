@@ -52,7 +52,11 @@ export const getFiatCurrency = (
 
 export const createDefaultSettings = (): Omit<
   AppSettingsRow,
-  "enabledHomeModesJson" | "selfPayGuestName"
+  | "enabledHomeModesJson"
+  | "selfPayGuestName"
+  | "selfPayBillsHidden"
+  | "menuOrdering"
+  | "orderDeviceId"
 > => ({
   id: settingsId,
   onboardingCompleted: null,

@@ -71,9 +71,11 @@ export const deriveBillSelfPayReference = (billId: string): SelfPayReference =>
     BILL_REFERENCE_RANGE
   )
 
-export const deriveOrderSelfPayReference = (billId: string): SelfPayReference =>
+export const deriveOrderSelfPayReference = (
+  pointer: string
+): SelfPayReference =>
   deriveReference(
-    `payky/order-ref/v1:${billId}`,
+    `payky/order-ref/v1:${pointer}`,
     ORDER_REFERENCE_BASE,
     ORDER_REFERENCE_RANGE
   )

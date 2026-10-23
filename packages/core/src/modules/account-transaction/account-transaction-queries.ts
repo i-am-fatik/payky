@@ -158,6 +158,10 @@ export const unclaimedIncomingTransactionsSinceQuery = (
       .select([
         "accountTransaction.id",
         "accountTransaction.createdAt",
+        "accountTransaction.amount",
+        "accountTransaction.currency",
+        "accountTransaction.occurredAt",
+        "accountTransactionIban.variableSymbol",
         "accountTransactionIban.recipientMessage",
         "accountTransactionLightning.lnInvoice",
       ])
