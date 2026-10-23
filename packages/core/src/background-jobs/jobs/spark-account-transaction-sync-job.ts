@@ -16,6 +16,7 @@ import { accountTransactionSparkByTransferIdQuery } from "../../modules/account-
 import {
   loadAutomaticReconciliation,
   reconcileAccountTransaction,
+  SELF_PAY_ARRIVAL_LOCK,
   upsertAutomaticReconciliationRows,
 } from "../../modules/reconciliation-claim/reconciliation-claim-actions.ts"
 import {
@@ -380,22 +381,27 @@ const createSparkAccountSyncSession = ({
           input.value,
           run.deps.date.now()
         )
-        const reconciliation = await run.ok(
-          loadAutomaticReconciliation(input.value, accountTransaction.id)
-        )
-
-        await runMutationWithCompletion((options) => {
-          upsertAccountTransactionRows(run.deps.evolu, accountTransaction, {
-            ...options,
-            owner: run.deps.evoluOwner,
-          })
-          if (reconciliation !== null) {
-            upsertAutomaticReconciliationRows(run.deps.evolu, reconciliation, {
-              ...options,
-              owner: run.deps.evoluOwner,
+        const reconciliation = await run.deps.lockManager.request(
+          SELF_PAY_ARRIVAL_LOCK,
+          async () => {
+            const loaded = await run.ok(
+              loadAutomaticReconciliation(input.value, accountTransaction.id)
+            )
+            await runMutationWithCompletion((options) => {
+              upsertAccountTransactionRows(run.deps.evolu, accountTransaction, {
+                ...options,
+                owner: run.deps.evoluOwner,
+              })
+              if (loaded !== null) {
+                upsertAutomaticReconciliationRows(run.deps.evolu, loaded, {
+                  ...options,
+                  owner: run.deps.evoluOwner,
+                })
+              }
             })
+            return loaded
           }
-        })
+        )
         const accountTransactionId = accountTransaction.id
         const paymentId = reconciliation?.claim.paymentId ?? null
         run.deps.console.info("Created Spark account transaction.", {

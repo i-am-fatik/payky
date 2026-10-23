@@ -6,6 +6,7 @@ import type {
 import { startCashuAccountSyncJob } from "./jobs/cashu-account-sync-job.ts"
 import { startEetReportingJob } from "./jobs/eet-reporting-job.ts"
 import { startFioAccountTransactionSyncJob } from "./jobs/fio-account-transaction-sync-job.ts"
+import { startSelfPayPointerJob } from "./jobs/self-pay-pointer-job.ts"
 import { startSparkAccountTransactionSyncJob } from "./jobs/spark-account-transaction-sync-job.ts"
 import { startTableSelfPayPublishingJob } from "./jobs/table-self-pay-publishing-job.ts"
 
@@ -21,6 +22,7 @@ const nativeBackgroundJobs = [
   ...cliBackgroundJobs,
   startEetReportingJob,
   startTableSelfPayPublishingJob,
+  startSelfPayPointerJob,
 ] satisfies ReadonlyArray<AppBackgroundJob>
 
 /**
@@ -32,6 +34,7 @@ const browserBackgroundJobs = [
   startSparkAccountTransactionSyncJob,
   startEetReportingJob,
   startTableSelfPayPublishingJob,
+  startSelfPayPointerJob,
 ] satisfies ReadonlyArray<AppBackgroundJob>
 
 export function getBackgroundJobsForRuntime(

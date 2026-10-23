@@ -1,11 +1,14 @@
-import type { InsertValues, MutationOptions } from "@evolu/common"
+import type { InsertValues, MutationOptions, UpsertValues } from "@evolu/common"
 import type { EvoluDep } from "../shared/evolu-deps.ts"
 import { removeUndefinedValues } from "../shared/evolu-utils.ts"
 import type { WithSparkDetails } from "../shared/spark-details.ts"
+import type { SelfPayPointer } from "../table-self-pay/table-self-pay-reference-utils.ts"
 import type {
+  payment,
   paymentBtc,
   paymentBtcLightning,
   paymentBtcSpark,
+  paymentIban,
 } from "./payment.ts"
 import type { PaymentId } from "./payment-types.ts"
 
@@ -60,4 +63,30 @@ export const upsertPaymentSparkDetails = (
       options
     )
   }
+}
+
+export interface SelfPayPaymentRows {
+  readonly payment: UpsertValues<typeof payment>
+  readonly iban: Omit<UpsertValues<typeof paymentIban>, "id"> | null
+  readonly spark: PaymentBtcInput | null
+  readonly pointer: SelfPayPointer | null
+}
+
+export const upsertSelfPayPaymentRows = (
+  evolu: EvoluDep["evolu"],
+  { payment, iban, spark, pointer }: SelfPayPaymentRows,
+  options: MutationOptions
+): void => {
+  evolu.upsert("payment", removeUndefinedValues(payment), options)
+  if (iban !== null) {
+    evolu.upsert(
+      "paymentIban",
+      removeUndefinedValues({ ...iban, id: payment.id }),
+      options
+    )
+  }
+  if (spark !== null) {
+    upsertPaymentSparkDetails(evolu, payment.id, spark, options)
+  }
+  evolu.upsert("paymentSelfPay", { id: payment.id, pointer }, options)
 }

@@ -49,6 +49,7 @@ import {
 import {
   createSelfPayTestContext,
   openSelfPayBill,
+  receiveBankTransfer,
   type SelfPayTestContext,
   selfPayTestMasterKey,
 } from "../../modules/table-self-pay/table-self-pay-test-fixtures.ts"
@@ -753,6 +754,25 @@ describe("table self-pay publishing job", () => {
       .poll(() => publishedView(context))
       .toMatchObject({ enabled: false })
     expect(sparkWallet.privacyRequests).toEqual([])
+  })
+
+  test("replaces the view with an empty one when the last bill closes", async () => {
+    await using context = await createSelfPayTestContext()
+    const { reference } = await openSelfPayBill(context, {
+      lines: [{ name: "Pizza", amount: 10_100 }],
+    })
+    await using _job = await startJob(context)
+    await expect.poll(() => publishedView(context)?.bills.length).toBe(1)
+
+    context.clock.advance(60_000)
+    await receiveBankTransfer(context, {
+      amount: 10_100,
+      variableSymbol: reference,
+    })
+
+    await expect
+      .poll(() => publishedView(context))
+      .toMatchObject({ enabled: true, bills: [] })
   })
 
   test("tells guests to pay with staff once self-pay is switched off", async () => {

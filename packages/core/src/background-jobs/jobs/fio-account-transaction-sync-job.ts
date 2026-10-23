@@ -21,6 +21,7 @@ import type { FioPluginId } from "../../modules/fio-plugin/fio-plugin-types.ts"
 import {
   loadAutomaticReconciliation,
   reconcileAccountTransaction,
+  SELF_PAY_ARRIVAL_LOCK,
   upsertAutomaticReconciliationRows,
 } from "../../modules/reconciliation-claim/reconciliation-claim-actions.ts"
 import {
@@ -390,30 +391,35 @@ class FioPluginSync {
             constantSymbol: transaction.constantSymbol,
             specificSymbol: transaction.specificSymbol,
             bankReference,
+            recipientMessage: createRecipientMessage(transaction),
           },
         }
         const accountTransaction = computeAccountTransactionRows(
           input,
           this.run.deps.date.now()
         )
-        const reconciliation = await this.run.ok(
-          loadAutomaticReconciliation(input, accountTransaction.id)
-        )
-
-        await runMutationWithCompletion((options) => {
-          upsertAccountTransactionRows(
-            this.run.deps.evolu,
-            accountTransaction,
-            { ...options, owner: this.run.deps.evoluOwner }
-          )
-          if (reconciliation !== null) {
-            upsertAutomaticReconciliationRows(
-              this.run.deps.evolu,
-              reconciliation,
-              { ...options, owner: this.run.deps.evoluOwner }
+        const reconciliation = await this.run.deps.lockManager.request(
+          SELF_PAY_ARRIVAL_LOCK,
+          async () => {
+            const loaded = await this.run.ok(
+              loadAutomaticReconciliation(input, accountTransaction.id)
             )
+            await runMutationWithCompletion((options) => {
+              upsertAccountTransactionRows(
+                this.run.deps.evolu,
+                accountTransaction,
+                { ...options, owner: this.run.deps.evoluOwner }
+              )
+              if (loaded !== null) {
+                upsertAutomaticReconciliationRows(this.run.deps.evolu, loaded, {
+                  ...options,
+                  owner: this.run.deps.evoluOwner,
+                })
+              }
+            })
+            return loaded
           }
-        })
+        )
         const accountTransactionId = accountTransaction.id
         this.run.deps.console.info("Created FIO account transaction.", {
           accountId: this.plugin.accountId,
@@ -556,6 +562,11 @@ const areTokensEqual = (
 ): boolean =>
   left.length === right.length &&
   left.every((token, index) => token.token === right[index]?.token)
+
+const createRecipientMessage = ({ recipientMessage }: FioTransaction) => {
+  const parsed = NonEmptyStringSchema.safeParse(recipientMessage)
+  return parsed.success ? parsed.data : null
+}
 
 const createTransactionNote = (transaction: FioTransaction) => {
   const parts = [
