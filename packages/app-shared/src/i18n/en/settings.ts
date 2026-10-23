@@ -682,6 +682,21 @@ export const enSettings = {
   "settings.security.mnemonic.title": "Account recovery",
   "settings.security.mnemonic.warning":
     "If you lose this phrase, this account and its data can never be recovered — not even by us.",
+  "settings.security.selfPayRelays.add": "Add relay",
+  "settings.security.selfPayRelays.default": "Default",
+  "settings.security.selfPayRelays.description":
+    "Tables publish their open bills to these Nostr relays, and guests read them from there.",
+  "settings.security.selfPayRelays.footer":
+    "A table sticker names the relays it reads from. After changing them, print the stickers again: an older sticker reads only the relays it names.",
+  "settings.security.selfPayRelays.lastActive":
+    "Keep at least one relay on, or guests cannot see their bill.",
+  "settings.security.selfPayRelays.refused": "Refused the last publish",
+  "settings.security.selfPayRelays.title": "Pay-at-the-table relays",
+  "settings.security.selfPayRelays.toggle": "Publish through {url}",
+  "settings.security.selfPayRelays.url.description":
+    "Only secure WebSocket URLs starting with wss: are allowed.",
+  "settings.security.selfPayRelays.url.invalid": "Enter a valid wss URL.",
+  "settings.security.selfPayRelays.url.label": "Relay URL",
   "settings.security.title": "Security & Sync",
   "settings.security.transports.add": "Add transport",
   "settings.security.transports.demo":
@@ -830,7 +845,7 @@ export const enSettings = {
     "Name and seat count shown when assigning this table to a bill.",
   "settings.tables.form.card.title": "Details",
   "settings.tables.form.code.description":
-    "Not used yet — reserved for a future QR code that will identify this table.",
+    "Printed next to the table's QR code so staff can tell which table a sticker belongs to.",
   "settings.tables.form.code.label": "Code",
   "settings.tables.form.invalidId": "Invalid table id.",
   "settings.tables.form.name.invalid": "Enter a name.",
@@ -847,6 +862,50 @@ export const enSettings = {
   "settings.tables.search": "Search tables...",
   "settings.tables.search.clear.aria": "Clear search",
   "settings.tables.seatCount": "{value} seats",
+  "settings.tables.selfPay.bankNote":
+    "Bank transfers are matched only while a device syncs the bank account: the Android app or the CLI.",
+  "settings.tables.selfPay.description":
+    "Guests scan the table's QR code, see its open bill and pay all or part of it themselves, without waiting for staff.",
+  "settings.tables.selfPay.enabled": "Let guests pay at this table",
+  "settings.tables.selfPay.noPaymentMethod.description":
+    "No payment method reaches them. Turn on bank sync with the Fio plugin for the bank account, or add a Lightning wallet.",
+  "settings.tables.selfPay.noPaymentMethod.link": "Open payment accounts",
+  "settings.tables.selfPay.noPaymentMethod.title":
+    "Guests cannot pay at this table yet",
+  "settings.tables.selfPay.noRelayAccepted.description":
+    "No relay accepted its last publish.",
+  "settings.tables.selfPay.noRelayAccepted.retry": "Try again",
+  "settings.tables.selfPay.noRelayAccepted.title":
+    "Guests cannot see this table's bill",
+  "settings.tables.selfPay.open": "Open as a guest",
+  "settings.tables.selfPay.print": "Print sticker",
+  "settings.tables.selfPay.print.failed":
+    "Couldn't prepare the sticker. Try again.",
+  "settings.tables.selfPay.qr": "QR code for paying at {name}",
+  "settings.tables.selfPay.regenerate": "Regenerate QR code",
+  "settings.tables.selfPay.regenerate.confirm.cancel": "Cancel",
+  "settings.tables.selfPay.regenerate.confirm.confirm": "Regenerate",
+  "settings.tables.selfPay.regenerate.confirm.description":
+    "Stickers printed so far stop showing this table's bills. Print the new one and replace them.",
+  "settings.tables.selfPay.regenerate.confirm.title":
+    "Regenerate the QR code of {name}?",
+  "settings.tables.selfPay.title": "Pay at the table",
+  "settings.tables.selfPayGuestName.label": "Name guests see",
+  "settings.tables.selfPayGuestName.description":
+    "Guests paying at the table see it as who they pay, on the page and in the payment QR. Leave it empty and they see no name.",
+  "settings.tables.selfPayGuestName.placeholder": "Café on the Corner",
+  "settings.tables.selfPayGuestName.error": "Use at most 255 characters.",
+  "settings.tables.sticker.check": "Check a sticker",
+  "settings.tables.sticker.current": "This sticker belongs to {name}.",
+  "settings.tables.sticker.dismiss": "Dismiss",
+  "settings.tables.sticker.earlier":
+    "This is an earlier QR code of {name}. It no longer shows the table's bills, so replace it.",
+  "settings.tables.sticker.foreign":
+    "This sticker belongs to none of your tables. Remove it.",
+  "settings.tables.sticker.next": "Scan the next sticker",
+  "settings.tables.sticker.notTableCode": "This is not a table QR code.",
+  "settings.tables.sticker.relaysChanged":
+    "This sticker belongs to {name}, but it names other relays than the tables publish to. Print it again.",
   "settings.tables.title": "Tables",
   "settings.taxRates.activate": "Reactivate {name}",
   "settings.taxRates.activate.confirm.cancel": "Cancel",

@@ -13,6 +13,7 @@ import {
 } from "../../../components/ui/card.tsx"
 import { useTranslation } from "../../../hooks/use-translation.ts"
 import { RecoveryPhraseCard } from "./recovery-phrase-card.tsx"
+import { SelfPayRelayCard } from "./self-pay-relay-card.tsx"
 import { TransportAddForm } from "./transport-add-form.tsx"
 import { TransportList } from "./transport-list.tsx"
 
@@ -55,6 +56,7 @@ export function SecuritySettingsPage() {
             </Text>
           </CardFooter>
         </Card>
+        <SelfPayRelayCard />
       </YStack>
     </Screen>
   )

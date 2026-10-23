@@ -36,6 +36,7 @@ export const nativeEnv = createEnv({
       .transform((value) => value.split(",").map((url) => url.trim()))
       .pipe(z.array(z.url({ protocol: /^wss$/u })).min(1))
       .default(["wss://evolu.eu.freedomrelay.dev", "wss://evolu.linky.fit"]),
+    EXPO_PUBLIC_PAYKY_SELF_PAY_ORIGIN: z.url().default("https://t.payky.me"),
     EXPO_PUBLIC_PAYKY_SELF_PAY_RELAYS: SelfPayRelaysSchema,
     EXPO_PUBLIC_SENTRY_DSN: z.string().optional(),
     // Set only by the e2e builds (e2e/scripts); turns on the e2e bridge route.
@@ -53,6 +54,8 @@ export const nativeEnv = createEnv({
     EXPO_PUBLIC_PAYKY_NOSTR_RELAYS: process.env.EXPO_PUBLIC_PAYKY_NOSTR_RELAYS,
     EXPO_PUBLIC_LINKY_RELAYS_URL: process.env.EXPO_PUBLIC_LINKY_RELAYS_URL,
     EXPO_PUBLIC_LINKY_EVOLU_RELAYS: process.env.EXPO_PUBLIC_LINKY_EVOLU_RELAYS,
+    EXPO_PUBLIC_PAYKY_SELF_PAY_ORIGIN:
+      process.env.EXPO_PUBLIC_PAYKY_SELF_PAY_ORIGIN,
     EXPO_PUBLIC_PAYKY_SELF_PAY_RELAYS:
       process.env.EXPO_PUBLIC_PAYKY_SELF_PAY_RELAYS,
     EXPO_PUBLIC_SENTRY_DSN: process.env.EXPO_PUBLIC_SENTRY_DSN,

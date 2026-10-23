@@ -56,7 +56,10 @@ export default defineConfig({
     },
     {
       command: webServerCommand,
-      env: { VITE_PAYKY_EET_PRODUCTION_URL: fakeEetProductionUrl },
+      env: {
+        VITE_PAYKY_EET_PRODUCTION_URL: fakeEetProductionUrl,
+        VITE_PAYKY_SELF_PAY_ORIGIN: baseURL,
+      },
       url: baseURL,
       ignoreHTTPSErrors: true,
       reuseExistingServer: !process.env.CI,

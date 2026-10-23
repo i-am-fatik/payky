@@ -685,6 +685,21 @@ export const csSettings = {
   "settings.security.mnemonic.title": "Obnova účtu",
   "settings.security.mnemonic.warning":
     "Pokud tuto frázi ztratíte, tento účet a jeho data už nikdy nepůjde obnovit – ani nám se to nepodaří.",
+  "settings.security.selfPayRelays.add": "Přidat relay",
+  "settings.security.selfPayRelays.default": "Výchozí",
+  "settings.security.selfPayRelays.description":
+    "Stoly na tyto Nostr relaye publikují otevřené účty a hosté si je odtud čtou.",
+  "settings.security.selfPayRelays.footer":
+    "Nálepka stolu nese relaye, ze kterých čte. Po jejich změně nálepky vytiskněte znovu: starší nálepka čte jen relaye, které nese.",
+  "settings.security.selfPayRelays.lastActive":
+    "Aspoň jeden relay musí zůstat zapnutý, jinak hosté svůj účet neuvidí.",
+  "settings.security.selfPayRelays.refused": "Odmítl poslední publikaci",
+  "settings.security.selfPayRelays.title": "Relaye pro placení u stolu",
+  "settings.security.selfPayRelays.toggle": "Publikovat přes {url}",
+  "settings.security.selfPayRelays.url.description":
+    "Povolené jsou jen zabezpečené WebSocket URL začínající na wss:.",
+  "settings.security.selfPayRelays.url.invalid": "Zadejte platnou wss URL.",
+  "settings.security.selfPayRelays.url.label": "URL relaye",
   "settings.security.title": "Bezpečnost a synchronizace",
   "settings.security.transports.add": "Přidat transport",
   "settings.security.transports.demo":
@@ -834,7 +849,7 @@ export const csSettings = {
     "Název a počet míst zobrazené při přiřazování stolu k účtu.",
   "settings.tables.form.card.title": "Detaily",
   "settings.tables.form.code.description":
-    "Zatím se nepoužívá - rezervováno pro budoucí QR kód, který bude tento stůl identifikovat.",
+    "Tiskne se vedle QR kódu stolu, aby obsluha poznala, ke kterému stolu nálepka patří.",
   "settings.tables.form.code.label": "Kód",
   "settings.tables.form.invalidId": "Neplatné ID stolu.",
   "settings.tables.form.name.invalid": "Zadejte název.",
@@ -851,6 +866,50 @@ export const csSettings = {
   "settings.tables.search": "Hledat stoly...",
   "settings.tables.search.clear.aria": "Vymazat hledání",
   "settings.tables.seatCount": "{value} míst",
+  "settings.tables.selfPay.bankNote":
+    "Bankovní převody se párují jen tehdy, když některé zařízení synchronizuje bankovní účet: aplikace pro Android nebo CLI.",
+  "settings.tables.selfPay.description":
+    "Hosté naskenují QR kód stolu, uvidí otevřený účet a zaplatí ho celý nebo jeho část sami, bez čekání na obsluhu.",
+  "settings.tables.selfPay.enabled": "Povolit hostům platit u tohoto stolu",
+  "settings.tables.selfPay.noPaymentMethod.description":
+    "Žádnou platební metodou zaplatit nemohou. Zapněte u bankovního účtu synchronizaci přes Fio plugin, nebo přidejte Lightning peněženku.",
+  "settings.tables.selfPay.noPaymentMethod.link": "Otevřít platební účty",
+  "settings.tables.selfPay.noPaymentMethod.title":
+    "Hosté u tohoto stolu zatím nemohou platit",
+  "settings.tables.selfPay.noRelayAccepted.description":
+    "Poslední publikaci nepřijal žádný relay.",
+  "settings.tables.selfPay.noRelayAccepted.retry": "Zkusit znovu",
+  "settings.tables.selfPay.noRelayAccepted.title":
+    "Hosté nevidí účet tohoto stolu",
+  "settings.tables.selfPay.open": "Otevřít jako host",
+  "settings.tables.selfPay.print": "Vytisknout nálepku",
+  "settings.tables.selfPay.print.failed":
+    "Nálepku se nepodařilo připravit. Zkuste to znovu.",
+  "settings.tables.selfPay.qr": "QR kód pro placení u stolu {name}",
+  "settings.tables.selfPay.regenerate": "Vytvořit nový QR kód",
+  "settings.tables.selfPay.regenerate.confirm.cancel": "Zrušit",
+  "settings.tables.selfPay.regenerate.confirm.confirm": "Vytvořit nový",
+  "settings.tables.selfPay.regenerate.confirm.description":
+    "Dosud vytištěné nálepky přestanou zobrazovat účty tohoto stolu. Vytiskněte novou a nahraďte je.",
+  "settings.tables.selfPay.regenerate.confirm.title":
+    "Vytvořit nový QR kód pro {name}?",
+  "settings.tables.selfPay.title": "Placení u stolu",
+  "settings.tables.selfPayGuestName.label": "Jméno pro hosty",
+  "settings.tables.selfPayGuestName.description":
+    "Host, který platí u stolu, ho uvidí jako příjemce platby na stránce i v QR kódu. Když pole necháte prázdné, žádné jméno neuvidí.",
+  "settings.tables.selfPayGuestName.placeholder": "Kavárna U Lípy",
+  "settings.tables.selfPayGuestName.error": "Zadejte nejvýše 255 znaků.",
+  "settings.tables.sticker.check": "Zkontrolovat nálepku",
+  "settings.tables.sticker.current": "Tato nálepka patří ke stolu {name}.",
+  "settings.tables.sticker.dismiss": "Zavřít",
+  "settings.tables.sticker.earlier":
+    "Toto je starší QR kód stolu {name}. Už nezobrazuje účty stolu, proto ho vyměňte.",
+  "settings.tables.sticker.foreign":
+    "Tato nálepka nepatří k žádnému z vašich stolů. Odstraňte ji.",
+  "settings.tables.sticker.next": "Naskenovat další nálepku",
+  "settings.tables.sticker.notTableCode": "Toto není QR kód stolu.",
+  "settings.tables.sticker.relaysChanged":
+    "Tato nálepka patří ke stolu {name}, ale nese jiné relaye, než na které stoly publikují. Vytiskněte ji znovu.",
   "settings.tables.title": "Stoly",
   "settings.taxRates.activate": "Znovu aktivovat {name}",
   "settings.taxRates.activate.confirm.cancel": "Zrušit",

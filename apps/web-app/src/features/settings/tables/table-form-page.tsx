@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input.tsx"
 import { InlineEditField } from "@/features/settings/inline-edit-field.tsx"
 import { SettingsFormCard } from "@/features/settings/settings-form-card.tsx"
 import { SettingsFormEmptyState } from "@/features/settings/settings-form-empty-state.tsx"
+import { TableSelfPayCard } from "@/features/settings/tables/table-self-pay-card.tsx"
 import { useAppRun } from "@/hooks/use-app-run.ts"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog.ts"
 import { useEvoluQuery } from "@/hooks/use-evolu-query.ts"
@@ -301,6 +302,11 @@ function EditTableForm({ table }: { readonly table: TableRow }) {
           </FieldGroup>
         </CardContent>
       </Card>
+
+      <TableSelfPayCard
+        table={table}
+        onSave={(selfPayEnabled) => saveTable({ selfPayEnabled })}
+      />
 
       <Button
         variant="destructive"

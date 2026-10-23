@@ -1,10 +1,15 @@
-import { sqliteFalse } from "@evolu/common"
+import { sqliteFalse, sqliteTrue } from "@evolu/common"
 import { accountListQuery } from "@payky/core/evolu/device-account"
+import { createNostrRelayClient } from "@payky/core/integrations/nostr/nostr-relay-client"
 import {
   saveCashRegisterAccount,
   saveFiatBankAccount,
   saveSparkAccount,
 } from "@payky/core/modules/account/account-actions"
+import {
+  fiatBankAccountQuery,
+  sparkAccountQuery,
+} from "@payky/core/modules/account/account-queries"
 import {
   createCashRegisterAccountId,
   legacyFiatBankAccountId,
@@ -12,7 +17,10 @@ import {
 import { createAccountTransaction } from "@payky/core/modules/account-transaction/account-transaction-actions"
 import { completeOnboarding } from "@payky/core/modules/app-settings/app-settings-actions"
 import { PaymentMethodOrderJson } from "@payky/core/modules/app-settings/app-settings-utils"
-import { cancelBill } from "@payky/core/modules/bill/bill-actions"
+import {
+  addManualAmountToBill,
+  cancelBill,
+} from "@payky/core/modules/bill/bill-actions"
 import { billByIdQuery } from "@payky/core/modules/bill/bill-queries"
 import { BillId } from "@payky/core/modules/bill/bill-types"
 import {
@@ -29,6 +37,7 @@ import { deviceByIdQuery } from "@payky/core/modules/device/device-queries"
 import { DeviceId } from "@payky/core/modules/device/device-types"
 import { createEetSale } from "@payky/core/modules/eet/eet-actions"
 import { toEetCashRegisterId } from "@payky/core/modules/eet/eet-utils"
+import { saveFioPlugin } from "@payky/core/modules/fio-plugin/fio-plugin-actions"
 import { upsertItemSnapshot } from "@payky/core/modules/item/item-actions"
 import { createStandaloneItemSnapshot } from "@payky/core/modules/item/item-utils"
 import {
@@ -50,8 +59,13 @@ import {
   runMutationWithCompletion,
 } from "@payky/core/modules/shared/evolu-utils"
 import {
+  deriveTableSelfPayRoot,
+  type MasterKey,
+} from "@payky/core/modules/shared/key-derivation"
+import {
   BankAccountInputIbanSchema,
   FiatCurrency,
+  Integer,
   NonEmptyString255,
   NonEmptyString255Schema,
   NonEmptyStringSchema,
@@ -59,11 +73,13 @@ import {
   PositiveInteger,
   PositiveNumber,
   TimestampMsSchema,
+  VariableSymbol,
 } from "@payky/core/modules/shared/schema"
 import { useAtomValue } from "jotai"
 import { useEffect } from "react"
 import { z } from "zod"
 import { accountAtom } from "@/atoms/account.ts"
+import { appEnv } from "@/core/app-env.ts"
 import { useAppRun } from "@/hooks/use-app-run.ts"
 
 declare global {
@@ -96,8 +112,29 @@ declare global {
     ) => Promise<{ readonly pinUnblockToken: string | null } | null>
     __e2eUnblockThisDevice?: () => Promise<void>
     __e2eDeviceAccountIds?: () => Promise<ReadonlyArray<string>>
+    __e2eSeedActiveFioPlugin?: () => Promise<void>
+    __e2eReceiveBankTransfer?: (transfer: {
+      readonly amount: number
+      readonly currency: FiatCurrency
+      readonly variableSymbol: string
+      readonly recipientMessage: string
+    }) => Promise<void>
+    __e2eReceiveLightningPayment?: (payment: {
+      readonly lnInvoice: string
+      readonly amountSats: number
+    }) => Promise<void>
+    __e2eAddBillLines?: (
+      billId: string,
+      lines: ReadonlyArray<{ readonly name: string; readonly amount: number }>
+    ) => Promise<void>
   }
 }
+
+const selfPayArrivalDeps = (masterKey: MasterKey) => ({
+  tableSelfPayRoot: deriveTableSelfPayRoot(masterKey),
+  nostrRelayClient: createNostrRelayClient(),
+  selfPayDefaultRelays: appEnv.VITE_PAYKY_SELF_PAY_RELAYS,
+})
 
 /**
  * Exposes `window.__e2eSeedOnboarding`, which writes the same account/settings
@@ -262,6 +299,108 @@ export function E2eTestBridge() {
           mutationOptions
         )
       })
+    }
+
+    window.__e2eSeedActiveFioPlugin = async () => {
+      await using run = appRun()
+      const [bankAccount] = await run.deps.evolu.loadQuery(fiatBankAccountQuery)
+      if (bankAccount === undefined) throw new Error("No bank account seeded.")
+      await run.ok(
+        saveFioPlugin({
+          accountId: bankAccount.id,
+          numberOfSecondsBetweenChecks: PositiveInteger(300),
+          isActive: sqliteTrue,
+        })
+      )
+    }
+
+    window.__e2eReceiveBankTransfer = async (transfer) => {
+      await using run = appRun()
+      const [bankAccount] = await run.deps.evolu.loadQuery(fiatBankAccountQuery)
+      if (bankAccount === undefined) throw new Error("No bank account seeded.")
+      const accountTransactionId = await run.ok(
+        createAccountTransaction({
+          accountId: bankAccount.id,
+          amount: Integer(transfer.amount),
+          currency: transfer.currency,
+          occurredAt: TimestampMsSchema.decode(run.deps.date.now().getTime()),
+          note: null,
+          internalTransferGroupId: null,
+          source: { deviceId: null, source: "auto" },
+          iban: {
+            variableSymbol: VariableSymbol(transfer.variableSymbol),
+            constantSymbol: null,
+            specificSymbol: null,
+            bankReference: NonEmptyString255Schema.decode(
+              `e2e:${createRowId<"Transfer">()}`
+            ),
+            recipientMessage: NonEmptyStringSchema.decode(
+              transfer.recipientMessage
+            ),
+          },
+        })
+      )
+
+      await using selfPayRun = run.create({
+        ...run.deps,
+        ...selfPayArrivalDeps(run.deps.masterKey),
+      })
+      await selfPayRun.ok(reconcileAccountTransaction(accountTransactionId))
+    }
+
+    window.__e2eReceiveLightningPayment = async ({ lnInvoice, amountSats }) => {
+      await using run = appRun()
+      const [sparkAccount] = await run.deps.evolu.loadQuery(sparkAccountQuery)
+      if (sparkAccount === undefined)
+        throw new Error("No Spark account seeded.")
+      const accountTransactionId = await run.ok(
+        createAccountTransaction({
+          accountId: sparkAccount.id,
+          amount: Integer(amountSats),
+          currency: "BTC",
+          occurredAt: TimestampMsSchema.decode(run.deps.date.now().getTime()),
+          note: null,
+          internalTransferGroupId: null,
+          source: { deviceId: null, source: "auto" },
+          spark: {
+            sparkTransferId: NonEmptyStringSchema.decode(
+              `e2e:${createRowId<"Transfer">()}`
+            ),
+            lightning: {
+              lnInvoice: NonEmptyStringSchema.decode(lnInvoice),
+              preImage: null,
+              paymentHash: null,
+            },
+          },
+        })
+      )
+
+      await using selfPayRun = run.create({
+        ...run.deps,
+        ...selfPayArrivalDeps(run.deps.masterKey),
+      })
+      await selfPayRun.ok(reconcileAccountTransaction(accountTransactionId))
+    }
+
+    window.__e2eAddBillLines = async (billIdValue, lines) => {
+      const parsedBillId = BillId.parse(billIdValue)
+      await using run = appRun()
+      const [billRow] = await run.deps.evolu.loadQuery(
+        billByIdQuery(parsedBillId)
+      )
+      if (billRow === undefined)
+        throw new Error(`Bill ${billIdValue} not found.`)
+      for (const { name, amount } of lines) {
+        await run.orThrow(
+          addManualAmountToBill({
+            billId: parsedBillId,
+            deviceId,
+            totalAmount: NonNegativeInteger(amount),
+            name: NonEmptyString255(name),
+            currency: billRow.currency,
+          })
+        )
+      }
     }
 
     window.__e2eMarkSparkPaid = async (paymentIdValue) => {
@@ -636,6 +775,10 @@ export function E2eTestBridge() {
       delete window.__e2eCreateAndPaySecondPayment
       delete window.__e2eCancelBill
       delete window.__e2eSeedEetSaleFromAnotherDevice
+      delete window.__e2eSeedActiveFioPlugin
+      delete window.__e2eReceiveBankTransfer
+      delete window.__e2eReceiveLightningPayment
+      delete window.__e2eAddBillLines
     }
   }, [appRun, deviceId])
 
