@@ -8,6 +8,7 @@ import {
   cashuBackgroundJobs,
   cliBackgroundJobs,
   getBackgroundJobsForRuntime,
+  nativeBackgroundJobs,
 } from "./background-jobs.ts"
 import { startCashuAccountSyncJob } from "./jobs/cashu-account-sync-job.ts"
 import { startEetReportingJob } from "./jobs/eet-reporting-job.ts"
@@ -51,11 +52,11 @@ describe("getBackgroundJobsForRuntime", () => {
       startSparkAccountTransactionSyncJob,
       startEetReportingJob,
       startQerkoTerminalSyncJob,
-      startQerkoPaymentConnectionJob,
-      startQerkoPaymentSyncJob,
       startLightningAddressVerifyJob,
       startTableSelfPayPublishingJob,
       startSelfPayPointerJob,
+      startQerkoPaymentConnectionJob,
+      startQerkoPaymentSyncJob,
     ])
   })
 
@@ -63,12 +64,13 @@ describe("getBackgroundJobsForRuntime", () => {
     expect(cliBackgroundJobs).toContain(startMonetaAccountTransactionSyncJob)
   })
 
-  test("keeps EET reporting out of the CLI, which has no terminal device", () => {
-    expect(cliBackgroundJobs).not.toContain(startEetReportingJob)
-  })
-
-  test("keeps the Qerko job out of the CLI, which has no terminal device", () => {
-    expect(cliBackgroundJobs).not.toContain(startQerkoTerminalSyncJob)
+  test("runs every other job of a native device in the CLI, EET reporting and Qerko's terminal included", () => {
+    expect(nativeBackgroundJobs).toEqual(
+      expect.arrayContaining([...cliBackgroundJobs])
+    )
+    expect(
+      nativeBackgroundJobs.filter((job) => !cliBackgroundJobs.includes(job))
+    ).toEqual([startQerkoPaymentConnectionJob, startQerkoPaymentSyncJob])
   })
 
   test("keeps the Cashu job out of the CLI, which has no Linky owners", () => {

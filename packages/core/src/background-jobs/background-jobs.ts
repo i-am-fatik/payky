@@ -1,6 +1,5 @@
 import type {
   AppBackgroundJob,
-  BackgroundJob,
   CashuBackgroundJob,
 } from "./background-job-types.ts"
 import { startCashuAccountSyncJob } from "./jobs/cashu-account-sync-job.ts"
@@ -22,17 +21,17 @@ export const cliBackgroundJobs = [
   startFioAccountTransactionSyncJob,
   startMonetaAccountTransactionSyncJob,
   startSparkAccountTransactionSyncJob,
-] satisfies ReadonlyArray<BackgroundJob>
-
-const nativeBackgroundJobs = [
-  ...cliBackgroundJobs,
   startEetReportingJob,
   startQerkoTerminalSyncJob,
-  startQerkoPaymentConnectionJob,
-  startQerkoPaymentSyncJob,
   startLightningAddressVerifyJob,
   startTableSelfPayPublishingJob,
   startSelfPayPointerJob,
+] satisfies ReadonlyArray<AppBackgroundJob>
+
+export const nativeBackgroundJobs = [
+  ...cliBackgroundJobs,
+  startQerkoPaymentConnectionJob,
+  startQerkoPaymentSyncJob,
 ] satisfies ReadonlyArray<AppBackgroundJob>
 
 /**
