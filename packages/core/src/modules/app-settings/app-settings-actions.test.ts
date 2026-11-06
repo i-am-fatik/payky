@@ -1,4 +1,4 @@
-import { testCreateRun } from "@evolu/common"
+import { createIdFromString, testCreateRun } from "@evolu/common"
 import { describe, expect, test } from "vitest"
 import type { DateDep, EvoluOwnerDep } from "../../deps.ts"
 import { createTestDateDep, testFixedDate } from "../../testing/date-dep.ts"
@@ -21,9 +21,11 @@ import {
   markRecoveryPhraseVerified,
   requireNotOnboarded,
   setEnabledHomeModes,
+  setOrderDevice,
+  setWrittenOrders,
   updateTipSettings,
 } from "./app-settings-actions.ts"
-import { settingsQuery } from "./app-settings-queries.ts"
+import { selfPaySettingsQuery, settingsQuery } from "./app-settings-queries.ts"
 import {
   createDefaultSettings,
   defaultPaymentMethod,
@@ -309,5 +311,52 @@ describe("finishOnboarding", () => {
       [],
       [],
     ])
+  })
+})
+
+describe("guests writing what they pay for", () => {
+  const thisDevice = createIdFromString<"Device">("this device")
+  const otherDevice = createIdFromString<"Device">("other device")
+
+  test("switching writing on names this device to take orders when none is named", async () => {
+    await using testEvolu = await createEvoluTest()
+    const { evolu } = testEvolu
+    await using run = testCreateRun(evoluTestDeps(evolu))
+    evolu.upsert("appSettings", createDefaultSettings(), {
+      owner: evolu.appOwner,
+    })
+
+    await run.ok(setWrittenOrders({ on: true, deviceId: thisDevice }))
+
+    await expect
+      .poll(() => evolu.loadQuery(selfPaySettingsQuery))
+      .toEqual([
+        expect.objectContaining({
+          writtenOrders: 1,
+          orderDeviceId: thisDevice,
+        }),
+      ])
+  })
+
+  test("leaves the device that takes orders when one is named", async () => {
+    await using testEvolu = await createEvoluTest()
+    const { evolu } = testEvolu
+    await using run = testCreateRun(evoluTestDeps(evolu))
+    evolu.upsert("appSettings", createDefaultSettings(), {
+      owner: evolu.appOwner,
+    })
+    await run.ok(setOrderDevice(otherDevice))
+
+    await run.ok(setWrittenOrders({ on: true, deviceId: thisDevice }))
+    await run.ok(setWrittenOrders({ on: false, deviceId: thisDevice }))
+
+    await expect
+      .poll(() => evolu.loadQuery(selfPaySettingsQuery))
+      .toEqual([
+        expect.objectContaining({
+          writtenOrders: null,
+          orderDeviceId: otherDevice,
+        }),
+      ])
   })
 })

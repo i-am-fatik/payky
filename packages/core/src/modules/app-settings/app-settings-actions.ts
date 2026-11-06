@@ -27,7 +27,7 @@ import { type FiatCurrency, type Iban, TimestampMs } from "../shared/schema.ts"
 import { seedTaxRatesForCountry } from "../tax-rate/tax-rate-actions.ts"
 import { taxRatesQuery } from "../tax-rate/tax-rate-queries.ts"
 import type { appSettings } from "./app-settings.ts"
-import { settingsQuery } from "./app-settings-queries.ts"
+import { selfPaySettingsQuery, settingsQuery } from "./app-settings-queries.ts"
 import {
   stringifyTipFixedAmounts,
   stringifyTipPercentages,
@@ -293,6 +293,25 @@ export const setMenuOrdering = ({
       ? { menuOrdering: sqliteTrue, orderDeviceId: deviceId }
       : { menuOrdering: null }
   )
+
+export const setWrittenOrders =
+  ({
+    on,
+    deviceId,
+  }: {
+    readonly on: boolean
+    readonly deviceId: DeviceId
+  }): Task<AppSettingsId, never, EvoluDep & EvoluOwnerDep> =>
+  async (run) => {
+    if (!on) return run(updateSettings({ writtenOrders: null }))
+    const [settings] = await run.deps.evolu.loadQuery(selfPaySettingsQuery)
+    return run(
+      updateSettings({
+        writtenOrders: sqliteTrue,
+        orderDeviceId: settings?.orderDeviceId ?? deviceId,
+      })
+    )
+  }
 
 export const setOrderDevice = (
   deviceId: DeviceId
