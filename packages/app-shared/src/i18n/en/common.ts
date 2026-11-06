@@ -96,6 +96,9 @@ export const enCommon = {
   "notifications.title": "Notifications",
   "orders.announced": "New order {number} · {table}",
   "orders.announced.noTable": "New order {number}",
+  "orders.announced.written":
+    "New order {number} · {table} · {amount} · {text}",
+  "orders.announced.written.noTable": "New order {number} · {amount} · {text}",
   "orders.announced.open": "Open",
   "orders.empty": "Nothing to serve.",
   "orders.line": "{name} × {quantity}",
@@ -110,6 +113,8 @@ export const enCommon = {
   "orders.served": "Served",
   "orders.soldOut": "Sold out",
   "orders.title": "To serve",
+  "orders.written": "Guest's text: “{text}”",
+  "orders.written.arrivedOf": "{arrived} of {named}",
   "passwordTextarea.hide": "Hide content",
   "passwordTextarea.show": "Show content",
   "scanner.dialog.title": "Scan code",
