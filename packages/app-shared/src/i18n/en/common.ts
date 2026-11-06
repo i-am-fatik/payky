@@ -163,6 +163,7 @@ export const enCommon = {
   "stats.items.metric": "Rank items by",
   "stats.items.quantity": "{quantity} ×",
   "stats.items.showAll": "Show all",
+  "stats.items.written": "Written orders",
   "stats.items.showTop": "Show top 10",
   "stats.kpi.averageSale": "Average sale",
   "stats.kpi.breakdown.excess": "Excess",

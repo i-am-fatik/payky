@@ -165,6 +165,7 @@ export const csCommon = {
   "stats.items.metric": "Řadit položky",
   "stats.items.quantity": "{quantity} ×",
   "stats.items.showAll": "Zobrazit vše",
+  "stats.items.written": "Psané objednávky",
   "stats.items.showTop": "Zobrazit prvních 10",
   "stats.kpi.averageSale": "Průměrný prodej",
   "stats.kpi.breakdown.excess": "Přebytek",

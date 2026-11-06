@@ -166,6 +166,7 @@ export const skCommon = {
   "stats.items.metric": "Zoradiť položky",
   "stats.items.quantity": "{quantity} ×",
   "stats.items.showAll": "Zobraziť všetko",
+  "stats.items.written": "Písané objednávky",
   "stats.items.showTop": "Zobraziť prvých 10",
   "stats.kpi.averageSale": "Priemerný predaj",
   "stats.kpi.breakdown.excess": "Prebytok",
