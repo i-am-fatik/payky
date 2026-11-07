@@ -12,7 +12,13 @@ import type { NostrFilter } from "../../integrations/nostr/nostr-relay-client.ts
 import { jsonCodec } from "../../zod-utils.ts"
 import type { CatalogCategoryRow } from "../catalog-category/catalog-category.ts"
 import type { CatalogItemRow } from "../catalog-item/catalog-item.ts"
-import { FiatCurrencySchema, HexSchema } from "../shared/schema.ts"
+import type { Money } from "../shared/money.ts"
+import {
+  type FiatCurrency,
+  FiatCurrencySchema,
+  HexSchema,
+  Integer,
+} from "../shared/schema.ts"
 import {
   createSelfPaySelectionNonce,
   deriveSelfPayPointerKeys,
@@ -341,6 +347,33 @@ export const isWrittenAmountInRange = (
   amount: number,
   currency: SelfPayMenu["currency"]
 ): boolean => amount >= selfPayMinimum(currency) && amount <= MAX_WRITTEN_AMOUNT
+
+export interface WrittenOrder {
+  readonly text: string
+  readonly arrived: Money
+  readonly named: Money
+}
+
+export interface WrittenOrderColumns {
+  readonly currency: FiatCurrency
+  readonly writtenAmount: number | null
+  readonly writtenText: string | null
+  readonly writtenArrived: number | null
+}
+
+export const writtenOrderOf = ({
+  currency,
+  writtenAmount,
+  writtenText,
+  writtenArrived,
+}: WrittenOrderColumns): WrittenOrder | null =>
+  writtenAmount === null || writtenText === null || writtenArrived === null
+    ? null
+    : {
+        text: writtenText,
+        arrived: { value: Integer(writtenArrived), currency },
+        named: { value: Integer(writtenAmount), currency },
+      }
 
 export const createSelfPayWrittenSelectionText = ({
   tablePublicKey,

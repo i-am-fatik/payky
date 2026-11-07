@@ -56,8 +56,8 @@ import {
 } from "../menu-order/menu-order-actions.ts"
 import { menuOrderByBillIdQuery } from "../menu-order/menu-order-queries.ts"
 import {
-  type SelfPayOrderSelection,
-  SelfPayOrderSelectionSchema,
+  type SelfPayOrderIntent,
+  SelfPayOrderIntentSchema,
 } from "../menu-order/menu-order-utils.ts"
 import { activeMonetaPluginsQuery } from "../moneta-plugin/moneta-plugin-queries.ts"
 import type { SelfPayPaymentRows } from "../payment/payment-row-actions.ts"
@@ -423,7 +423,7 @@ const allocationWrites = (
   }))
 
 interface MenuOrderIntent {
-  readonly selection: SelfPayOrderSelection
+  readonly selection: SelfPayOrderIntent
   readonly currency: FiatCurrency
 }
 
@@ -447,7 +447,7 @@ const loadMenuOrderIntent =
   ): Task<MenuOrderIntent | null, never, SelfPayArrivalDeps> =>
   async (run) => {
     const selection = await run.ok(
-      lookUpSelfPaySelection(pointer, SelfPayOrderSelectionSchema)
+      lookUpSelfPaySelection(pointer, SelfPayOrderIntentSchema)
     )
     if (selection === null) return ok(null)
     const menu = await run.ok(loadSelfPayMenuVersion(selection.menu))
@@ -538,6 +538,7 @@ const creditMenuOrderArrival =
         pointer,
         reference,
         selection: intent.selection,
+        arrived: amount,
         deviceId,
         root: tableSelfPayRoot,
       })
@@ -546,7 +547,7 @@ const creditMenuOrderArrival =
       order === null ||
       !meetsSelfPayMinimum({
         amount,
-        remainder: order.total,
+        remainder: order.askedToPay,
         currency: intent.currency,
       })
     ) {

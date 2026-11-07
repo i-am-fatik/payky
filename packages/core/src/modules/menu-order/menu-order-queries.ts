@@ -55,10 +55,24 @@ export const menuOrdersToServeQuery = createQuery((db) =>
       "menuOrder.billId",
       "menuOrder.number",
       "menuOrder.note",
+      "menuOrder.writtenAmount",
       "menuOrder.createdAt",
       "bill.tableId",
       "bill.currency",
     ])
+    .select((eb) => {
+      const writtenLine = eb
+        .selectFrom("billLine")
+        .innerJoin("item", "item.id", "billLine.itemId")
+        .whereRef("billLine.billId", "=", "menuOrder.billId")
+        .where("menuOrder.writtenAmount", "is not", null)
+        .where("billLine.isDeleted", "is not", sqliteTrue)
+        .limit(1)
+      return [
+        writtenLine.select("item.name").as("writtenText"),
+        writtenLine.select("billLine.totalAmount").as("writtenArrived"),
+      ]
+    })
     .where("menuOrder.isDeleted", "is not", sqliteTrue)
     .where("menuOrder.servedAt", "is", null)
     .where("menuOrder.billId", "is not", null)
@@ -76,7 +90,14 @@ export const recentMenuOrdersQuery = (createdSince: DateIso) =>
   createQuery((db) =>
     db
       .selectFrom("menuOrder")
-      .select(["id", "billId", "pointer", "number", "createdAt"])
+      .select([
+        "id",
+        "billId",
+        "pointer",
+        "number",
+        "writtenAmount",
+        "createdAt",
+      ])
       .where("isDeleted", "is not", sqliteTrue)
       .where("createdAt", ">=", createdSince)
       .where("billId", "is not", null)
