@@ -940,10 +940,12 @@ function BillCart({
         mx={-12}
         py={0}
         gap={0}
+        bg="background"
         borderBottomWidth={0}
         borderBottomLeftRadius={0}
         borderBottomRightRadius={0}
       >
+        <View position="absolute" t={0} r={0} b={0} l={0} bg="card" />
         <SafeAreaView edges={["bottom"]}>
           <CardContent pb={16}>
             <Collapsible open={summaryExpanded} onOpenChange={setSummaryOpen}>
