@@ -736,11 +736,24 @@ function BillCart({
       }}
     >
       <FadeHeader
-        title={title}
+        title={tableName ?? title}
         subtitle={
-          [tableName, opened]
+          (tableName === undefined ? [opened] : [title, opened])
             .filter((part) => part !== undefined)
             .join(" · ") || undefined
+        }
+        endAddon={
+          <Button
+            variant="outline"
+            size="sm"
+            h={44}
+            minW={44}
+            px={12}
+            iconStart={Table2}
+            aria-label={t("bill.table.aria")}
+            label={tableName === undefined ? t("bill.table.assign") : undefined}
+            onPress={() => setTablePickerOpen(true)}
+          />
         }
       />
 
@@ -1071,15 +1084,6 @@ function BillCart({
                   summaries.length === 0 || cart.pending || split.pending
                 }
                 onPress={() => setSplitOpen(true)}
-              />
-              <Button
-                variant="outline"
-                flex={1}
-                h={48}
-                iconStart={Table2}
-                aria-label={t("bill.table.aria")}
-                label={tableName ?? t("bill.table.assign")}
-                onPress={() => setTablePickerOpen(true)}
               />
               <Button
                 flex={1}
