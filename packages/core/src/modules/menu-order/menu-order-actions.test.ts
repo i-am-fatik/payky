@@ -69,6 +69,14 @@ import {
 
 const selectionKey = deriveSelfPaySelectionKey(selfPayTestRoot)
 
+const billClosedAtQuery = (billId: BillId) =>
+  createQuery((db) =>
+    db
+      .selectFrom("bill")
+      .select(["closedAt", "tableId"])
+      .where("id", "=", billId)
+  )
+
 const menuOrderByBillIdQuery = (billId: BillId) =>
   createQuery((db) =>
     db
@@ -332,6 +340,10 @@ describe("a paid order", () => {
       note: "bez cukru",
       servedAt: null,
     })
+    const [bill] = await context.deps.evolu.loadQuery(
+      billClosedAtQuery(deriveMenuOrderBillId(order.pointer))
+    )
+    expect(bill?.closedAt).not.toBe(null)
   })
 
   test("paid by a transfer to a MONETA account is recorded the same as to Fio", async () => {

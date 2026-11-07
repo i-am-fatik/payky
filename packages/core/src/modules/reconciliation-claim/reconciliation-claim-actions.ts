@@ -197,21 +197,27 @@ const loadSelfPayReconciliation =
 
     const { rows: selfPayPayment, allocations, order } = arrival
     const { payment } = selfPayPayment
-    const billClosing = await run.ok(
-      loadBillClosedAtIfCovered(
-        {
-          id: payment.id,
-          billId: payment.billId ?? null,
-          amount: payment.amount,
-          currency: payment.currency,
-          tipAmount: payment.tipAmount,
-          btcAmountSats: selfPayPayment.spark?.amountSats ?? null,
-          cashuAmountSats: null,
-          lightningAddressAmountSats: null,
-        },
-        transaction
-      )
-    )
+    const billClosing =
+      order !== null && payment.amount >= order.total
+        ? {
+            billId: order.bill.bill.id,
+            closedAt: TimestampMsSchema.decode(run.deps.date.now().getTime()),
+          }
+        : await run.ok(
+            loadBillClosedAtIfCovered(
+              {
+                id: payment.id,
+                billId: payment.billId ?? null,
+                amount: payment.amount,
+                currency: payment.currency,
+                tipAmount: payment.tipAmount,
+                btcAmountSats: selfPayPayment.spark?.amountSats ?? null,
+                cashuAmountSats: null,
+                lightningAddressAmountSats: null,
+              },
+              transaction
+            )
+          )
 
     return ok({
       claim: createAutomaticReconciliationClaim(
