@@ -4,6 +4,7 @@ import { useNow } from "@payky/app-shared/use-now"
 import {
   countSelfPayMenuItems,
   createSelfPayOrderSelectionText,
+  type SelfPayMenu,
 } from "@payky/core/modules/menu-order/menu-order-utils"
 import {
   type FiatCurrency,
@@ -62,7 +63,7 @@ import { GuestCheckout, type GuestPaymentChoice } from "./guest-checkout.tsx"
 import { formatGuestAmount, formatGuestTime } from "./guest-format.ts"
 import { useGuestLanguage } from "./guest-language.tsx"
 import { GuestLightningPayment } from "./guest-lightning-payment.tsx"
-import { GuestMenu, type GuestOrderChoice } from "./guest-menu.tsx"
+import { GuestMenu } from "./guest-menu.tsx"
 import {
   GuestOrderList,
   guestOrderLeft,
@@ -391,17 +392,23 @@ function GuestOrdering({
     setSession(payment)
   }
 
-  const placeOrder = async (choice: GuestOrderChoice) => {
-    if (orderableMenu === null) return
+  const placeOrder = async (
+    { currency }: SelfPayMenu,
+    selectionText: string,
+    {
+      total,
+      amount,
+      summary,
+    }: {
+      readonly total: number
+      readonly amount: number
+      readonly summary: string
+    }
+  ) => {
     setIsPreparing(true)
     setIsRefused(false)
     const { pointer, event } = createSelfPaySelectionEvent({
-      selectionText: createSelfPayOrderSelectionText({
-        tablePublicKey: table,
-        menu: orderableMenu,
-        items: choice.items,
-        note: choice.note,
-      }),
+      selectionText,
       selectionKey: hexToBytes(selectionKey),
       createdAt: Math.floor(Date.now() / 1000),
     })
@@ -418,15 +425,15 @@ function GuestOrdering({
         pointer,
         table,
         event,
-        currency: orderableMenu.currency,
-        total: choice.total,
-        summary: choice.summary,
+        currency,
+        total,
+        summary,
         startedAt,
       })
     )
     startPayment({
-      bill: orderBill(pointer, orderableMenu.currency),
-      amount: choice.amount,
+      bill: orderBill(pointer, currency),
+      amount,
       pointer,
       isSeenByRestaurant: true,
       startedAt,
@@ -502,8 +509,17 @@ function GuestOrdering({
           <GuestMenu
             menu={orderableMenu}
             isPreparing={isPreparing}
-            onOrder={(choice) => {
-              void placeOrder(choice)
+            onOrder={({ items, note, ...choice }) => {
+              void placeOrder(
+                orderableMenu,
+                createSelfPayOrderSelectionText({
+                  tablePublicKey: table,
+                  menu: orderableMenu,
+                  items,
+                  note,
+                }),
+                choice
+              )
             }}
           />
         </>
