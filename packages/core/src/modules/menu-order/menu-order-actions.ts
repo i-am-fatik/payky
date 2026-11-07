@@ -14,7 +14,10 @@ import { z } from "zod"
 import type { DateDep, EvoluOwnerDep } from "../../deps.ts"
 import { unclaimedIncomingTransactionsSinceQuery } from "../account-transaction/account-transaction-queries.ts"
 import type { AccountTransactionId } from "../account-transaction/account-transaction-types.ts"
-import { settingsQuery } from "../app-settings/app-settings-queries.ts"
+import {
+  selfPaySettingsQuery,
+  settingsQuery,
+} from "../app-settings/app-settings-queries.ts"
 import { getFiatCurrency } from "../app-settings/app-settings-utils.ts"
 import {
   loadNextBillDisplayNumber,
@@ -100,15 +103,23 @@ export interface SelfPayMenuSnapshot {
 
 export const loadSelfPayMenu =
   (): Task<SelfPayMenuSnapshot, never, EvoluDep> => async (run) => {
-    const [items, categories, [settings]] = await Promise.all(
-      run.deps.evolu.loadQueries([
-        catalogItemsQuery,
-        catalogCategoriesQuery,
-        settingsQuery,
-      ])
-    )
+    const [items, categories, [settings], [selfPaySettings]] =
+      await Promise.all(
+        run.deps.evolu.loadQueries([
+          catalogItemsQuery,
+          catalogCategoriesQuery,
+          settingsQuery,
+          selfPaySettingsQuery,
+        ])
+      )
     const currency = getFiatCurrency(settings)
-    const full = buildSelfPayMenu({ items, categories, currency })
+    const full = buildSelfPayMenu({
+      items: selfPaySettings?.menuOrdering === sqliteTrue ? items : [],
+      categories,
+      currency,
+      written: selfPaySettings?.writtenOrders === sqliteTrue,
+    })
+
     const menu = fitSelfPayMenuIntoEvent(full)
     return ok({
       menu,

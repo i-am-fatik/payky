@@ -37,6 +37,7 @@ import type {
   AccountTransactionKind,
 } from "../account-transaction/account-transaction-types.ts"
 import { selfPaySettingsQuery } from "../app-settings/app-settings-queries.ts"
+import { offersOrders } from "../app-settings/app-settings-utils.ts"
 import type { BillRow } from "../bill/bill.ts"
 import { claimedTransactionsByBillIdQuery } from "../bill/bill-coverage-queries.ts"
 import { billByIdQuery } from "../bill/bill-queries.ts"
@@ -842,7 +843,7 @@ export const loadSelfPayInstructions =
       selectionKey: bytesToHex(
         deriveSelfPaySelectionKey(run.deps.tableSelfPayRoot)
       ),
-      menu: settings?.menuOrdering === sqliteTrue ? menuPointer : null,
+      menu: offersOrders(settings) ? menuPointer : null,
     })
   }
 

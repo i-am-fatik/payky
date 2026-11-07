@@ -11,6 +11,7 @@ import {
   setMenuOrdering,
   setOrderDevice,
   setSelfPayBillsHidden,
+  setWrittenOrders,
 } from "../../modules/app-settings/app-settings-actions.ts"
 import {
   createCatalogItemAtEnd,
@@ -131,6 +132,9 @@ const openCafe = async (context: SelfPayTestContext) => {
   return coffee
 }
 
+const latestMenu = (context: SelfPayTestContext) =>
+  publishedMenus(context).at(-1)
+
 describe("publishing the menu", () => {
   test("publishes the menu from the device that takes orders, and again when a price changes", async () => {
     await using context = await createSelfPayTestContext()
@@ -219,6 +223,66 @@ describe("publishing the menu", () => {
       createdAt: 1,
     }).pointer
     expect(await confirmationOf(anotherGuest)).toBe(null)
+  })
+})
+
+describe("guests writing what they pay for", () => {
+  test("publishes a menu with no items that offers writing while only writing is on, and the view names it", async () => {
+    await using context = await createSelfPayTestContext()
+    await using run = testCreateRun(context.deps)
+    await openCafe(context)
+    await run.ok(setMenuOrdering({ on: false, deviceId: context.deviceId }))
+    await run.ok(setWrittenOrders({ on: true, deviceId: context.deviceId }))
+
+    await using _job = await startJob(context)
+    await waitFor(() => latestMenu(context)?.written === true)
+
+    expect(latestMenu(context)?.categories).toEqual([])
+    const { view } = await loadSelfPayTestView(context)
+    expect(view.menu).toEqual({
+      publicKey: bytesToHex(menuKeys.publicKey),
+      readKey: bytesToHex(menuKeys.readKey),
+    })
+  })
+
+  test("publishes a new menu version when writing is switched on over an unchanged menu", async () => {
+    await using context = await createSelfPayTestContext()
+    await openCafe(context)
+    await using _job = await startJob(context)
+    await waitFor(() => (latestMenu(context) ?? null) !== null)
+    const before = latestMenu(context)
+    await using run = testCreateRun(context.deps)
+
+    await run.ok(setWrittenOrders({ on: true, deviceId: context.deviceId }))
+    await waitFor(() => latestMenu(context)?.written === true)
+
+    expect(before?.written).toBe(false)
+    expect(latestMenu(context)?.version).not.toBe(before?.version)
+    expect(latestMenu(context)?.categories).toEqual(before?.categories)
+  })
+
+  test("stops offering writing once the owner switches it off", async () => {
+    await using context = await createSelfPayTestContext()
+    await openCafe(context)
+    await using run = testCreateRun(context.deps)
+    await run.ok(setWrittenOrders({ on: true, deviceId: context.deviceId }))
+    await using _job = await startJob(context)
+    await waitFor(() => latestMenu(context)?.written === true)
+
+    await run.ok(setWrittenOrders({ on: false, deviceId: context.deviceId }))
+
+    await waitFor(() => latestMenu(context)?.written === false)
+  })
+
+  test("reads a menu without the flag as offering no writing", () => {
+    expect(
+      SelfPayMenuSchema.parse({
+        v: 1,
+        version: "aa".repeat(16),
+        currency: "CZK",
+        categories: [],
+      }).written
+    ).toBe(false)
   })
 })
 

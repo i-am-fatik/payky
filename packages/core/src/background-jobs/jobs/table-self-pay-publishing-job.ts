@@ -1,4 +1,4 @@
-import { DateIso, ok, type Run, sqliteTrue } from "@evolu/common"
+import { DateIso, ok, type Run } from "@evolu/common"
 import type { NostrEvent } from "../../integrations/nostr/nostr-event.ts"
 import { fetchYadioBtcExchangeRate } from "../../integrations/yadio/yadio-client.ts"
 import {
@@ -9,6 +9,7 @@ import {
   selfPaySettingsQuery,
   settingsQuery,
 } from "../../modules/app-settings/app-settings-queries.ts"
+import { offersOrders } from "../../modules/app-settings/app-settings-utils.ts"
 import { loadBillCoverage } from "../../modules/bill/bill-guards.ts"
 import { catalogCategoriesQuery } from "../../modules/catalog-category/catalog-category-queries.ts"
 import { catalogItemsQuery } from "../../modules/catalog-item/catalog-item-queries.ts"
@@ -229,8 +230,8 @@ class TableSelfPayPublishing {
   private async takesOrders(): Promise<boolean> {
     const [settings] = await this.run.deps.evolu.loadQuery(selfPaySettingsQuery)
     return (
-      settings?.menuOrdering === sqliteTrue &&
-      settings.orderDeviceId === this.run.deps.deviceId
+      settings?.orderDeviceId === this.run.deps.deviceId &&
+      offersOrders(settings)
     )
   }
 
