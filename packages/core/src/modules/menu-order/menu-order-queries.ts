@@ -1,6 +1,7 @@
 import { type DateIso, type KyselyNotNull, sqliteTrue } from "@evolu/common"
 
 import { createQuery } from "../../evolu/schema.ts"
+import type { BillId } from "../bill/bill-types.ts"
 import type { DateString } from "../shared/schema.ts"
 import type { MenuVersionId } from "./menu-order-types.ts"
 
@@ -34,6 +35,15 @@ export const lastMenuOrderNumberQuery = (day: DateString) =>
       .$narrowType<{ number: KyselyNotNull }>()
       .orderBy("number", "desc")
       .limit(1)
+  )
+
+export const menuOrderByBillIdQuery = (billId: BillId) =>
+  createQuery((db) =>
+    db
+      .selectFrom("menuOrder")
+      .select("id")
+      .where("billId", "=", billId)
+      .where("isDeleted", "is not", sqliteTrue)
   )
 
 export const menuOrdersToServeQuery = createQuery((db) =>

@@ -48,10 +48,12 @@ import { deriveBillSummaryTotal } from "../bill-line/bill-line-utils.ts"
 import type { DeviceId } from "../device/device-types.ts"
 import { activeFioPluginsQuery } from "../fio-plugin/fio-plugin-queries.ts"
 import {
+  deriveMenuOrderBillId,
   loadMenuOrderArrivalRows,
   loadSelfPayMenuVersion,
   type MenuOrderArrivalRows,
 } from "../menu-order/menu-order-actions.ts"
+import { menuOrderByBillIdQuery } from "../menu-order/menu-order-queries.ts"
 import {
   type SelfPayOrderSelection,
   SelfPayOrderSelectionSchema,
@@ -483,6 +485,10 @@ const resolveSelfPayTarget =
         loadSelfPayBill(reference, transaction.occurredAt)
       )
       if (bill !== null) return ok({ type: "bill", bill, selection: null })
+      const [recorded] = await run.deps.evolu.loadQuery(
+        menuOrderByBillIdQuery(deriveMenuOrderBillId(pointer))
+      )
+      if (recorded !== undefined) return ok(null)
       const intent = await run.ok(loadMenuOrderIntent(pointer))
       return ok(
         intent === null ? { type: "waiting" } : { type: "newOrder", intent }

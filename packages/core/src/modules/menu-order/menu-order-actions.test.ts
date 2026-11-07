@@ -455,6 +455,18 @@ describe("a paid order", () => {
     })
   })
 
+  test("does not record itself again when money arrives long after its bill closed", async () => {
+    await using context = await createSelfPayTestContext()
+    const { coffee, menu } = await openCafe(context)
+    const order = await orderFrom(context, menu, [[coffee, 1]])
+    await pay(context, order, 6500)
+    const before = await orderRowOf(context, order)
+    context.clock.advance(8 * 24 * 60 * 60 * 1000)
+
+    expect((await pay(context, order, 6500)).paymentId).toBe(null)
+    expect(await orderRowOf(context, order)).toEqual(before)
+  })
+
   test("paid twice is one bill, overpaid for staff to resolve", async () => {
     await using context = await createSelfPayTestContext()
     const { coffee, menu } = await openCafe(context)
