@@ -24,12 +24,17 @@ import { loadBillCoverage } from "../bill/bill-guards.ts"
 import type { BillId } from "../bill/bill-types.ts"
 import type { BillLineRow } from "../bill-line/bill-line.ts"
 import { loadCalculatedBillLineSummaries } from "../bill-line/bill-line-actions.ts"
-import type { BillLineSummaryId } from "../bill-line/bill-line-types.ts"
+import type {
+  BillLineId,
+  BillLineSummaryId,
+} from "../bill-line/bill-line-types.ts"
 import { createBillLineSummaryId } from "../bill-line/bill-line-utils.ts"
 import { catalogCategoriesQuery } from "../catalog-category/catalog-category-queries.ts"
+import type { CatalogItemRow } from "../catalog-item/catalog-item.ts"
 import { catalogItemsQuery } from "../catalog-item/catalog-item-queries.ts"
 import { getStaffDisplayName } from "../catalog-item/catalog-item-utils.ts"
 import type { DeviceId } from "../device/device-types.ts"
+import type { ItemRow } from "../item/item.ts"
 import { createStandaloneItemSnapshot } from "../item/item-utils.ts"
 import type { EvoluDep } from "../shared/evolu-deps.ts"
 import { runMutationWithCompletion } from "../shared/evolu-utils.ts"
@@ -212,6 +217,99 @@ export const upsertMenuOrderRows = (
   evolu.upsert("menuOrder", menuOrder, options)
 }
 
+interface OrderedLine {
+  readonly snapshot: ItemRow
+  readonly line: BillLineRow
+  readonly allocation: { readonly key: string; readonly amount: number }
+}
+
+const orderedLine = ({
+  billId,
+  lineId,
+  snapshot,
+  type,
+  quantity,
+  totalAmount,
+  deviceId,
+}: {
+  readonly billId: BillId
+  readonly lineId: BillLineId
+  readonly snapshot: ItemRow
+  readonly type: BillLineRow["type"]
+  readonly quantity: number
+  readonly totalAmount: number
+  readonly deviceId: DeviceId
+}): OrderedLine => {
+  const line: BillLineRow = {
+    id: lineId,
+    billId,
+    deviceId,
+    catalogItemId: snapshot.catalogItemId,
+    itemId: snapshot.id,
+    type,
+    kind: "add",
+    quantity: PositiveNumber(quantity),
+    totalAmount: NonNegativeInteger(totalAmount),
+  }
+  const summaryId = createBillLineSummaryId({
+    billId,
+    catalogItemId: line.catalogItemId,
+    itemId: snapshot.id,
+    type,
+  })
+  return {
+    snapshot,
+    line,
+    allocation: { key: deriveSelfPayLineKey(summaryId), amount: totalAmount },
+  }
+}
+
+const pricedOrderLines = ({
+  pointer,
+  billId,
+  selection,
+  menu,
+  catalogItems,
+  deviceId,
+}: {
+  readonly pointer: SelfPayPointer
+  readonly billId: BillId
+  readonly selection: SelfPayOrderSelection
+  readonly menu: SelfPayMenu
+  readonly catalogItems: ReadonlyArray<CatalogItemRow>
+  readonly deviceId: DeviceId
+}): ReadonlyArray<OrderedLine> | null => {
+  const priced = priceSelfPayOrder(menu, selection.items)
+  if (priced === null) return null
+  const catalogByKey = new Map(
+    catalogItems.map((item) => [deriveSelfPayMenuItemKey(item.id), item])
+  )
+  return priced.lines.map(({ item, quantity, totalAmount }) => {
+    const catalogItem = catalogByKey.get(item.key)
+    return orderedLine({
+      billId,
+      lineId: createIdFromString<"BillLine">(
+        `menu-order-line:${pointer}:${item.key}`
+      ),
+      snapshot: createStandaloneItemSnapshot({
+        catalogItemId: catalogItem?.id ?? null,
+        name: NonEmptyString255(item.name),
+        description:
+          item.description === null
+            ? null
+            : NonEmptyString255(item.description),
+        currency: menu.currency,
+        unitAmount: NonNegativeInteger(item.unitAmount),
+        taxRateId: catalogItem?.taxRateId ?? null,
+      }),
+      type: catalogItem === undefined ? "manualAmount" : "catalogItem",
+      quantity,
+      totalAmount,
+      deviceId,
+    })
+  })
+}
+
 export const loadMenuOrderArrivalRows =
   ({
     pointer,
@@ -229,8 +327,6 @@ export const loadMenuOrderArrivalRows =
   async (run) => {
     const menu = await run.ok(loadSelfPayMenuVersion(selection.menu))
     if (menu === null || menu.version !== selection.menu) return ok(null)
-    const priced = priceSelfPayOrder(menu, selection.items)
-    if (priced === null) return ok(null)
 
     const [tables, catalogItems] = await Promise.all(
       run.deps.evolu.loadQueries([selfPayTablesQuery, catalogItemsQuery])
@@ -249,51 +345,15 @@ export const loadMenuOrderArrivalRows =
     if (table === undefined) return ok(null)
 
     const billId = deriveMenuOrderBillId(pointer)
-    const catalogByKey = new Map(
-      catalogItems.map((item) => [deriveSelfPayMenuItemKey(item.id), item])
-    )
-    const ordered = priced.lines.map(({ item, quantity, totalAmount }) => {
-      const catalogItem = catalogByKey.get(item.key)
-      const snapshot = createStandaloneItemSnapshot({
-        catalogItemId: catalogItem?.id ?? null,
-        name: NonEmptyString255(item.name),
-        description:
-          item.description === null
-            ? null
-            : NonEmptyString255(item.description),
-        currency: menu.currency,
-        unitAmount: NonNegativeInteger(item.unitAmount),
-        taxRateId: catalogItem?.taxRateId ?? null,
-      })
-      const type = catalogItem === undefined ? "manualAmount" : "catalogItem"
-      const line: BillLineRow = {
-        id: createIdFromString<"BillLine">(
-          `menu-order-line:${pointer}:${item.key}`
-        ),
-        billId,
-        deviceId,
-        catalogItemId: catalogItem?.id ?? null,
-        itemId: snapshot.id,
-        type,
-        kind: "add",
-        quantity: PositiveNumber(quantity),
-        totalAmount: NonNegativeInteger(totalAmount),
-      }
-      const summaryId = createBillLineSummaryId({
-        billId,
-        catalogItemId: line.catalogItemId,
-        itemId: snapshot.id,
-        type,
-      })
-      return {
-        snapshot,
-        line,
-        allocation: {
-          key: deriveSelfPayLineKey(summaryId),
-          amount: totalAmount,
-        },
-      }
+    const ordered = pricedOrderLines({
+      pointer,
+      billId,
+      selection,
+      menu,
+      catalogItems,
+      deviceId,
     })
+    if (ordered === null) return ok(null)
 
     const now = run.deps.date.now()
     const day = DateStringSchema.decode(format(now, "yyyy-MM-dd"))
@@ -325,7 +385,7 @@ export const loadMenuOrderArrivalRows =
         note:
           selection.note === null ? null : NonEmptyString255(selection.note),
       },
-      total: priced.total,
+      total: ordered.reduce((sum, { line }) => sum + line.totalAmount, 0),
       lines: ordered.map(({ allocation }) => allocation),
     })
   }
