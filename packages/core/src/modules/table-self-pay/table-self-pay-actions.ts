@@ -53,6 +53,8 @@ import {
   loadMenuOrderArrivalRows,
   loadSelfPayMenuVersion,
   type MenuOrderArrivalRows,
+  raiseWrittenOrderLine,
+  type WrittenOrderRest,
 } from "../menu-order/menu-order-actions.ts"
 import { menuOrderByBillIdQuery } from "../menu-order/menu-order-queries.ts"
 import {
@@ -205,6 +207,7 @@ interface SelfPayArrival {
   readonly rows: SelfPayPaymentRows
   readonly allocations: ReadonlyArray<SelfPayAllocationWrite>
   readonly order: MenuOrderArrivalRows | null
+  readonly writtenOrderRest: WrittenOrderRest | null
 }
 
 interface SelfPaySelectionAllocation {
@@ -334,10 +337,9 @@ const allocateSelfPaySelection =
 const selfPayPaymentId = (transaction: SelfPayTransaction) =>
   createIdFromString<"Payment">(`self-pay:${transaction.id}`)
 
-const loadSelfPayRemainder =
+const loadSelfPayCoveredBefore =
   (
     bill: SelfPayBill,
-    summaries: ReadonlyArray<BillLineSummary>,
     transaction: SelfPayTransaction
   ): Task<number, never, EvoluDep> =>
   async (run) => {
@@ -345,9 +347,21 @@ const loadSelfPayRemainder =
       claimedTransactionsByBillIdQuery(bill.id)
     )
     const paymentId = selfPayPaymentId(transaction)
-    const covered = calculateClaimedSum(
-      claimedTransactions.filter((claimed) => claimed.paymentId !== paymentId)
+    return ok(
+      calculateClaimedSum(
+        claimedTransactions.filter((claimed) => claimed.paymentId !== paymentId)
+      )
     )
+  }
+
+const loadSelfPayRemainder =
+  (
+    bill: SelfPayBill,
+    summaries: ReadonlyArray<BillLineSummary>,
+    transaction: SelfPayTransaction
+  ): Task<number, never, EvoluDep> =>
+  async (run) => {
+    const covered = await run.ok(loadSelfPayCoveredBefore(bill, transaction))
     return ok(Math.max(0, deriveBillSummaryTotal(summaries) - covered))
   }
 
@@ -404,6 +418,7 @@ const creditSelfPayArrival =
       },
       allocations: allocationWrites(paymentId, bill.id, allocation.lines),
       order: null,
+      writtenOrderRest: null,
     })
   }
 
@@ -432,6 +447,11 @@ type SelfPayTarget =
       readonly type: "bill"
       readonly bill: SelfPayBill
       readonly selection: SelfPayShareSelection | null
+    }
+  | {
+      readonly type: "writtenOrderRest"
+      readonly bill: SelfPayBill
+      readonly writtenAmount: number
     }
   | { readonly type: "newOrder"; readonly intent: MenuOrderIntent }
   | { readonly type: "waiting" }
@@ -485,10 +505,17 @@ const resolveSelfPayTarget =
       const bill = await run.ok(
         loadSelfPayBill(reference, transaction.occurredAt)
       )
-      if (bill !== null) return ok({ type: "bill", bill, selection: null })
       const [recorded] = await run.deps.evolu.loadQuery(
         menuOrderByBillIdQuery(deriveMenuOrderBillId(pointer))
       )
+      const writtenAmount = recorded?.writtenAmount ?? null
+      if (bill !== null) {
+        return ok(
+          writtenAmount === null
+            ? { type: "bill", bill, selection: null }
+            : { type: "writtenOrderRest", bill, writtenAmount }
+        )
+      }
       if (recorded !== undefined) return ok(null)
       const intent = await run.ok(loadMenuOrderIntent(pointer))
       return ok(
@@ -511,7 +538,7 @@ const resolveSelfPayTarget =
   }
 
 const selfPayTargetCurrency = (target: ResolvedSelfPayTarget): FiatCurrency =>
-  target.type === "bill" ? target.bill.currency : target.intent.currency
+  target.type === "newOrder" ? target.intent.currency : target.bill.currency
 
 const creditMenuOrderArrival =
   ({
@@ -577,6 +604,62 @@ const creditMenuOrderArrival =
         ? allocationWrites(paymentId, billId, order.lines)
         : [],
       order,
+      writtenOrderRest: null,
+    })
+  }
+
+const creditWrittenOrderRest =
+  ({
+    transaction,
+    bill,
+    writtenAmount,
+    amount,
+    pointer,
+    ...method
+  }: Pick<SelfPayPaymentRows, "iban" | "spark"> & {
+    readonly transaction: SelfPayTransaction
+    readonly bill: SelfPayBill
+    readonly writtenAmount: number
+    readonly amount: number
+    readonly pointer: SelfPayPointer
+  }): Task<SelfPayArrival | null, never, EvoluDep> =>
+  async (run) => {
+    const coveredBefore = await run.ok(
+      loadSelfPayCoveredBefore(bill, transaction)
+    )
+    if (
+      !meetsSelfPayMinimum({
+        amount,
+        remainder: Math.max(0, writtenAmount - coveredBefore),
+        currency: bill.currency,
+      })
+    ) {
+      return ok(null)
+    }
+    return ok({
+      rows: {
+        payment: {
+          id: selfPayPaymentId(transaction),
+          deviceId: bill.deviceId,
+          billId: bill.id,
+          tableId: bill.tableId,
+          amount: NonNegativeInteger(amount),
+          currency: bill.currency,
+          tipAmount: NonNegativeInteger(0),
+          canceledAt: null,
+          expiresAt: null,
+        },
+        pointer,
+        ...method,
+      },
+      allocations: [],
+      order: null,
+      writtenOrderRest: raiseWrittenOrderLine({
+        pointer,
+        writtenAmount,
+        coveredBefore,
+        amount,
+      }),
     })
   }
 
@@ -602,6 +685,16 @@ const creditSelfPayTarget =
       )
     }
     if (arrival.pointer === null) return ok(null)
+    if (target.type === "writtenOrderRest") {
+      return run(
+        creditWrittenOrderRest({
+          ...arrival,
+          pointer: arrival.pointer,
+          bill: target.bill,
+          writtenAmount: target.writtenAmount,
+        })
+      )
+    }
     return run(
       creditMenuOrderArrival({
         ...arrival,

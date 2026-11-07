@@ -41,7 +41,7 @@ export const menuOrderByBillIdQuery = (billId: BillId) =>
   createQuery((db) =>
     db
       .selectFrom("menuOrder")
-      .select("id")
+      .select(["id", "writtenAmount"])
       .where("billId", "=", billId)
       .where("isDeleted", "is not", sqliteTrue)
   )

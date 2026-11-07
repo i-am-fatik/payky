@@ -491,6 +491,31 @@ export const loadMenuOrderArrivalRows =
     })
   }
 
+export interface WrittenOrderRest {
+  readonly lineId: BillLineId
+  readonly totalAmount: NonNegativeInteger
+}
+
+export const raiseWrittenOrderLine = ({
+  pointer,
+  writtenAmount,
+  coveredBefore,
+  amount,
+}: {
+  readonly pointer: SelfPayPointer
+  readonly writtenAmount: number
+  readonly coveredBefore: number
+  readonly amount: number
+}): WrittenOrderRest | null =>
+  coveredBefore >= writtenAmount
+    ? null
+    : {
+        lineId: deriveWrittenOrderLineId(pointer),
+        totalAmount: NonNegativeInteger(
+          Math.min(writtenAmount, coveredBefore + amount)
+        ),
+      }
+
 const toServePayment = (
   order: WrittenOrderColumns,
   { claimedSum, coverage }: BillCoverageSummary

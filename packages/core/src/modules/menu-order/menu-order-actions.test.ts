@@ -765,6 +765,37 @@ describe("a paid written order", () => {
     })
   })
 
+  test("raises its line when the rest arrives, up to what the guest named", async () => {
+    await using context = await createSelfPayTestContext()
+    const menu = await openBar(context)
+    const order = await writeOrder(context, menu)
+
+    await pay(context, order, 8000)
+    await pay(context, order, 1000)
+
+    const paidInParts = await lineOf(context, order)
+    await pay(context, order, 5000)
+
+    expect(paidInParts).toMatchObject({ totalAmount: 9000 })
+    expect(await lineOf(context, order)).toMatchObject({ totalAmount: 9000 })
+    expect(await coverageOf(context, order)).toMatchObject({
+      claimedSum: 14_000,
+      coverage: "overpaid",
+    })
+  })
+
+  test("counts the rest when it is below the self-pay minimum", async () => {
+    await using context = await createSelfPayTestContext()
+    const menu = await openBar(context)
+    const order = await writeOrder(context, menu)
+
+    await pay(context, order, 8950)
+    const { paymentId } = await pay(context, order, 50)
+
+    expect(paymentId).not.toBe(null)
+    expect(await lineOf(context, order)).toMatchObject({ totalAmount: 9000 })
+  })
+
   test("paid twice is one bill, overpaid for staff to resolve", async () => {
     await using context = await createSelfPayTestContext()
     const menu = await openBar(context)
@@ -792,6 +823,39 @@ describe("a paid written order", () => {
 
     expect(await orderRowOf(context, ordered)).toMatchObject({ number: 1 })
     expect(await orderRowOf(context, written)).toMatchObject({ number: 2 })
+  })
+
+  test("takes the rest of an order already recorded, though writing has been switched off since", async () => {
+    await using context = await createSelfPayTestContext()
+    const menu = await openBar(context)
+    const order = await writeOrder(context, menu)
+    await pay(context, order, 8000)
+    await using run = testCreateRun(context.deps)
+    await run.ok(setWrittenOrders({ on: false, deviceId: context.deviceId }))
+
+    const { paymentId } = await pay(context, order, 1000)
+
+    expect(paymentId).not.toBe(null)
+    expect(await lineOf(context, order)).toMatchObject({ totalAmount: 9000 })
+  })
+
+  test("leaves money that arrives long after its bill closed unmatched, and the order as it was", async () => {
+    await using context = await createSelfPayTestContext()
+    const menu = await openBar(context)
+    const order = await writeOrder(context, menu)
+    await pay(context, order, 8000)
+    const before = await orderRowOf(context, order)
+    context.clock.advance(8 * 24 * 60 * 60 * 1000)
+
+    const { paymentId } = await pay(context, order, 1000)
+
+    expect(paymentId).toBe(null)
+    expect(await lineOf(context, order)).toMatchObject({ totalAmount: 8000 })
+    expect(await orderRowOf(context, order)).toEqual(before)
+    expect(await coverageOf(context, order)).toMatchObject({
+      claimedSum: 8000,
+      coverage: "paid",
+    })
   })
 
   test("paid by Lightning is capped by what the money is worth", async () => {
