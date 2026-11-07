@@ -96,6 +96,7 @@ export const skCommon = {
     "Čokoľvek, čo bude vyžadovať vašu pozornosť, sa objaví tu.",
   "notifications.empty.title": "Žiadne oznámenia",
   "notifications.title": "Oznámenia",
+  "orders.accept": "Prijať",
   "orders.announced": "Nová objednávka {number} · {table}",
   "orders.announced.noTable": "Nová objednávka {number}",
   "orders.announced.written":
@@ -113,6 +114,13 @@ export const skCommon = {
   "orders.notFullyPaid": "Zaplatené len čiastočne",
   "orders.number": "#{number}",
   "orders.paid": "Zaplatené",
+  "orders.preparing": "Pripravuje sa",
+  "orders.reject": "Odmietnuť",
+  "orders.reject.cancel": "Ponechať objednávku",
+  "orders.reject.confirm": "Odmietnuť objednávku",
+  "orders.reject.description":
+    "Peniaze sa hosťovi samy nevrátia. Po odmietnutí pokladňa otvorí, čo hosť zaplatil, a vrátenie tam zaznamenáte.",
+  "orders.reject.title": "Odmietnuť objednávku {number}?",
   "orders.served": "Vydané",
   "orders.soldOut": "Vypredané",
   "orders.title": "Na výdaj",

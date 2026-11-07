@@ -1278,6 +1278,7 @@ export const skSettings = {
   "access.action.markCashPaid": "Potvrdiť prijatie hotovosti",
   "access.action.markIbanPaid": "Potvrdiť príchod prevodu",
   "access.action.resolveOverpayment": "Vyriešiť preplatok",
+  "access.action.rejectOrder": "Odmietnuť objednávku",
   "access.action.refund": "Vrátiť peniaze",
   "access.action.removeAccount": "Odobrať účet z tohto zariadenia",
   "access.action.removeLines": "Odobrať položky z účtu",
