@@ -707,14 +707,14 @@ function GuestTable({ address }: { readonly address: TableSelfPayAddress }) {
   )
   const bank = bill === undefined ? view.bank : findSelfPayBank(view, bill)
   const offersMethod = bank !== null || view.lightning !== null
-  const menuOffer =
+  const menuAccess =
     view.enabled && view.menu !== null && view.selectionKey !== null
       ? { menuKeys: view.menu, selectionKey: view.selectionKey }
       : null
-  const offersBillAndMenu = menuOffer !== null && view.bills.length > 0
+  const offersBillAndMenu = menuAccess !== null && view.bills.length > 0
   const shownMenu =
-    menuOffer !== null && (!offersBillAndMenu || section === "menu")
-      ? menuOffer
+    menuAccess !== null && (!offersBillAndMenu || section === "menu")
+      ? menuAccess
       : null
 
   const startPayment = async (choice: GuestPaymentChoice) => {
@@ -813,7 +813,7 @@ function GuestTable({ address }: { readonly address: TableSelfPayAddress }) {
               {t("selfPay.menu.tab.bill")}
             </TabsTrigger>
             <TabsTrigger value="menu" className={guestTabClassName}>
-              <GuestMenuTabLabel address={address} {...menuOffer} />
+              <GuestMenuTabLabel address={address} {...menuAccess} />
             </TabsTrigger>
           </TabsList>
         </Tabs>
