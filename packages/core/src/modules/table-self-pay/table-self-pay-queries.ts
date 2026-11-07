@@ -249,6 +249,17 @@ export const tableSelfPayConfirmationsQuery = (
       ])
       .where("bill.tableId", "=", tableId)
       .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom("menuOrder")
+              .select("menuOrder.id")
+              .whereRef("menuOrder.billId", "=", "bill.id")
+              .where("menuOrder.isDeleted", "is not", sqliteTrue)
+          )
+        )
+      )
+      .where((eb) =>
         eb.or([
           eb("bill.closedAt", "is", null),
           eb("bill.closedAt", ">=", endedAfter),

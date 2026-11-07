@@ -308,7 +308,7 @@ describe("an order paid in parts", () => {
     expect(await covered()).toMatchObject({ total: 6500, covered: 6500 })
   })
 
-  test("leaves the order's bill out of the bills guests pay at the table", async () => {
+  test("leaves the order's bill and its payment out of the table's view", async () => {
     await using context = await createSelfPayTestContext()
     const coffee = await openCafe(context)
     await using _job = await startJob(context)
@@ -340,5 +340,6 @@ describe("an order paid in parts", () => {
     const { view } = await loadSelfPayTestView(context)
 
     expect(view.bills).toEqual([])
+    expect(view.confirmations).toEqual([])
   })
 })
