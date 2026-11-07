@@ -1,4 +1,7 @@
-import { newMenuOrderAnnouncements } from "@payky/app-shared/menu-order-announcement"
+import {
+  MENU_ORDER_ANNOUNCEMENT_MS,
+  newMenuOrderAnnouncements,
+} from "@payky/app-shared/menu-order-announcement"
 import { menuOrdersToServeQuery } from "@payky/core/modules/menu-order/menu-order-queries"
 import type { MenuOrderId } from "@payky/core/modules/menu-order/menu-order-types"
 import { tablesQuery } from "@payky/core/modules/table/table-queries"
@@ -30,6 +33,7 @@ export function MenuOrderAnnouncer() {
       formatMoney: (money) => formatMoney(money, locale),
     })) {
       toast.success(message, {
+        duration: MENU_ORDER_ANNOUNCEMENT_MS,
         action: {
           label: t("orders.announced.open"),
           onClick: () => {
