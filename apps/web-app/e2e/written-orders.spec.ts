@@ -77,7 +77,12 @@ const bankField = async (
 
 const orderStatus = (
   guest: Page,
-  key: "selfPay.order.paid" | "selfPay.order.left",
+  key:
+    | "selfPay.order.paid"
+    | "selfPay.order.left"
+    | "selfPay.order.preparing"
+    | "selfPay.order.served"
+    | "selfPay.order.rejected",
   params: Readonly<Record<string, string | number>>
 ) => guest.getByRole("main").getByText(translateParams("en", key, params))
 
@@ -271,7 +276,7 @@ test("the device that takes orders records it and the guest sees order 1, 2x piv
   })
 })
 
-test("staff see New order 1 · Bar · $90.00 · 2x pivo, open it and mark it served", async ({
+test("staff see New order 1 · Bar · $90.00 · 2x pivo, accept it and mark it served, and the guest sees both", async ({
   seededPage: page,
   context,
 }) => {
@@ -313,10 +318,107 @@ test("staff see New order 1 · Bar · $90.00 · 2x pivo, open it and mark it ser
     await expect(orderCard).toContainText(translate("en", "orders.paid"))
   })
 
-  await test.step("Served takes it off the list", async () => {
+  await test.step("the guest sees it paid and waiting for the staff", async () => {
+    await expect(
+      orderStatus(guest, "selfPay.order.paid", { number: 1 })
+    ).toBeVisible({ timeout: 45_000 })
+  })
+
+  await test.step("Accept tells the guest it is being prepared", async () => {
+    await orderCard
+      .getByRole("button", { name: translate("en", "orders.accept") })
+      .click()
+    await expect(orderCard).toContainText(translate("en", "orders.preparing"))
+    await expect(
+      orderStatus(guest, "selfPay.order.preparing", { number: 1 })
+    ).toBeVisible({ timeout: 45_000 })
+  })
+
+  await test.step("Served takes it off the list and tells the guest", async () => {
     await orderCard
       .getByRole("button", { name: translate("en", "orders.served") })
       .click()
+    await expect(orderCard).toHaveCount(0)
+    await expect(
+      orderStatus(guest, "selfPay.order.served", { number: 1 })
+    ).toBeVisible({ timeout: 45_000 })
+  })
+})
+
+test("staff reject a written order, refund it from its payment, and the guest is told", async ({
+  seededPage: page,
+  context,
+}) => {
+  test.setTimeout(120_000)
+  await routeFakeNostrRelays(context)
+  const orderCard = page.getByTestId("order-to-serve")
+  const guestAddress = await test.step("seed the bar", () => seedBar(page))
+  const guest = await context.newPage()
+
+  await test.step("a guest writes and pays while staff wait on To serve", async () => {
+    await gotoOrders(page)
+    await writeOrder(guest, guestAddress, { text: "2x pivo", amount: "90.00" })
+    await receiveShownBankTransfer(page, {
+      payer: guest,
+      language: "en",
+      amount: 9000,
+      currency: "USD",
+    })
+    await expect(orderCard).toHaveCount(1)
+  })
+
+  await test.step("going back in the dialog keeps the order", async () => {
+    await orderCard
+      .getByRole("button", { name: translate("en", "orders.reject") })
+      .click()
+    const dialog = page.getByRole("alertdialog")
+    await expect(dialog).toContainText(
+      translateParams("en", "orders.reject.title", { number: 1 })
+    )
+    await dialog
+      .getByRole("button", { name: translate("en", "orders.reject.cancel") })
+      .click()
+    await expect(orderCard).toHaveCount(1)
+  })
+
+  await test.step("rejecting opens the order's payment", async () => {
+    await orderCard
+      .getByRole("button", { name: translate("en", "orders.reject") })
+      .click()
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: translate("en", "orders.reject.confirm") })
+      .click()
+    await page
+      .getByRole("heading", { name: translate("en", "paymentDetail.title") })
+      .waitFor()
+  })
+
+  await test.step("the refund goes through from the payment", async () => {
+    await page
+      .getByRole("button", {
+        name: translate("en", "paymentDetail.refunds.action"),
+      })
+      .click()
+    const [confirmPrefix = ""] = translate("en", "refund.dialog.confirm").split(
+      "{amount}"
+    )
+    await page
+      .getByRole("button", { name: new RegExp(`^${confirmPrefix}.+`, "u") })
+      .click()
+    await expect(
+      page.getByText(translate("en", "refund.created"))
+    ).toBeVisible()
+  })
+
+  await test.step("the guest sees it rejected", async () => {
+    await expect(
+      orderStatus(guest, "selfPay.order.rejected", { number: 1 })
+    ).toBeVisible({ timeout: 45_000 })
+  })
+
+  await test.step("To serve no longer lists it", async () => {
+    await gotoOrders(page)
     await expect(orderCard).toHaveCount(0)
   })
 })
