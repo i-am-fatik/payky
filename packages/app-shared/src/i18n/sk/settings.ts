@@ -650,6 +650,7 @@ export const skSettings = {
     "Táto položka je zľava: suma sa odpočíta od účtu. To, či je položka zľavou, sa dá nastaviť len pri jej pridaní.",
   "catalog.items.form.discount.label": "Zľava",
   "catalog.items.form.inMenu.label": "V menu",
+  "catalog.items.form.inMenu.until": "Z menu zmizne o {time}",
   "catalog.items.form.internalDescription.invalid":
     "Interný popis je príliš dlhý (max. 255 znakov).",
   "catalog.items.form.internalDescription.label": "Interný popis",
@@ -1193,6 +1194,19 @@ export const skSettings = {
   "catalog.tables.selfPayOptions.orderDevice.placeholder": "Vyberte zariadenie",
   "catalog.tables.selfPayOptions.orderDevice.this": "{name} (toto zariadenie)",
   "catalog.tables.selfPayOptions.payBill": "Hostia platia účet stola",
+  "catalog.tables.selfPayOptions.written": "Hostia píšu, čo platia",
+  "catalog.tables.selfPayOptions.written.dayEnd.description":
+    "Obsluha môže napísanú položku hosťa dať na dnešok do menu. O túto hodinu z menu zmizne.",
+  "catalog.tables.selfPayOptions.written.dayEnd.label":
+    "Položky zapamätané na dnešok zmiznú z menu o",
+  "catalog.tables.selfPayOptions.written.description":
+    "Hosť pri stole napíše, čo platí, položku po položke, každú s vlastnou sumou. {appName} kontroluje len to, či peniaze prišli. Každá napísaná položka dostane sadzbu dane vybranú nižšie. Ak ste platiteľ DPH, obsluha ju môže zmeniť, kým objednávku neprijme.",
+  "catalog.tables.selfPayOptions.written.taxRate.label":
+    "Predvolená sadzba dane napísanej položky",
+  "catalog.tables.selfPayOptions.written.taxRate.missing.description":
+    "Ako platiteľ DPH vyberte predvolenú sadzbu dane napísanej položky. Dovtedy hostia písať nemôžu.",
+  "catalog.tables.selfPayOptions.written.taxRate.missing.title":
+    "Hostia zatiaľ písať nemôžu",
   "catalog.tables.selfPayOptions.title": "QR kódy na stoloch",
   "catalog.tables.selfPayOptions.withQrCode":
     "Stolov s QR kódom: {count} z {total}",
@@ -1318,6 +1332,7 @@ export const skSettings = {
   "access.action.confirmPaidDespiteCancellation":
     "Označiť zrušenú platbu ako zaplatenú",
   "access.action.createItem": "Vytvoriť položku katalógu",
+  "access.action.rememberItem": "Dať položku hosťa do menu",
   "access.action.disable": "Vypnúť riadenie prístupu",
   "access.action.exportDatabase": "Exportovať databázu aplikácie",
   "access.action.revealRecoveryPhrase": "Zobraziť obnovovaciu frázu",

@@ -33,6 +33,7 @@ const makeItem = (
   libraryProductId: null,
   inMenu: null,
   soldOut: null,
+  inMenuUntil: null,
   ...overrides,
 })
 

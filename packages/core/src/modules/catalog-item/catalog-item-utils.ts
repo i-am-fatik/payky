@@ -132,3 +132,9 @@ export const validateCatalogItemPricing = ({
 
   return ok()
 }
+export const isInMenu = (
+  item: Pick<CatalogItemRow, "inMenu" | "inMenuUntil">,
+  now: Date
+): boolean =>
+  item.inMenu !== null &&
+  (item.inMenuUntil === null || item.inMenuUntil > now.getTime())

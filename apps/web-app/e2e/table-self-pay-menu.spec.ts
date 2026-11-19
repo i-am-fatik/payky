@@ -280,25 +280,37 @@ test("a guest who pays the rest of the bill is thanked with focus, keeps the bil
   })
 })
 
-test("a guest who looks at the bill comes back to their basket", async ({
+test("a guest who looks at the bill comes back to their basket and their written item", async ({
   seededPage: page,
   context,
 }) => {
   test.setTimeout(120_000)
   await routeFakeNostrRelays(context)
   const guestAddress =
-    await test.step("seed a table with a pizza bill, and coffee and cake in the menu", async () => {
+    await test.step("seed a table with a pizza bill, coffee and cake in the menu, and writing on", async () => {
       await seedActiveFioPlugin(page)
       await addTable(page, "en", { name: "Table 6", seatCount: "4" })
       await addCatalogItem(page, "en", { name: "Pizza", price: "101" })
       const address = await enableTableSelfPay(page, "en", "Table 6")
       await seedMenu(page, { items: coffeeAndCake })
+      await gotoPage(page, "/catalog/tables", "en", "catalog.tables.title")
+      await toggleInlineSwitch(page, "catalog.tables.selfPayOptions.written")
       await openTableBill(page, "en", { table: "Table 6", items: ["Pizza"] })
       return address
     })
   const guest = await context.newPage()
-  const tab = (key: "selfPay.menu.tab.bill" | "selfPay.menu.tab.menu") =>
-    guest.getByRole("tab", { name: translate("en", key) })
+  const tab = (
+    key:
+      | "selfPay.menu.tab.bill"
+      | "selfPay.menu.tab.menu"
+      | "selfPay.written.tab"
+  ) => guest.getByRole("tab", { name: translate("en", key) })
+  const textField = guest.getByRole("textbox", {
+    name: translate("en", "selfPay.written.text.label"),
+  })
+  const amountField = guest.getByRole("textbox", {
+    name: translate("en", "selfPay.written.amount.label"),
+  })
 
   await test.step("a coffee in the basket is still there after a look at the bill", async () => {
     await guest.goto(guestAddress)
@@ -313,6 +325,20 @@ test("a guest who looks at the bill comes back to their basket", async ({
     await tab("selfPay.menu.tab.menu").click()
     await expect(payButton(guest, "$65.00")).toBeVisible()
     await expect(payButton(guest, "$101.00")).toHaveCount(0)
+  })
+
+  await test.step("a written item is still there after a look at the bill", async () => {
+    await tab("selfPay.written.tab").click()
+    await textField.fill("2x pivo")
+    await amountField.fill("90.00")
+    await expect(payButton(guest, "$90.00")).toBeVisible()
+    await tab("selfPay.menu.tab.bill").click()
+    await expect(payButton(guest, "$101.00")).toBeVisible()
+    await expect(textField).toHaveCount(0)
+    await tab("selfPay.written.tab").click()
+    await expect(textField).toHaveValue("2x pivo")
+    await expect(amountField).toHaveValue("90.00")
+    await expect(payButton(guest, "$90.00")).toBeVisible()
   })
 })
 

@@ -291,11 +291,12 @@ class TableSelfPayPublishing {
         loadBillCoverage(order.billId)
       )
       const last = this.confirmedOrders.get(order.pointer)
+      const total = order.writtenAmount ?? billTotal
       const confirmation: SelfPayOrderConfirmation = {
         v: 1,
         number: order.number,
-        total: billTotal,
-        covered: Math.min(claimedSum, billTotal),
+        total,
+        covered: Math.min(claimedSum, total),
         accepted: toUnixSeconds(order.acceptedAt),
         served: toUnixSeconds(order.servedAt),
         rejected: toUnixSeconds(order.rejectedAt),

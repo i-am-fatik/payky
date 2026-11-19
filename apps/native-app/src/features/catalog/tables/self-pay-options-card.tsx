@@ -1,21 +1,39 @@
 import { sqliteTrue } from "@evolu/common"
+import { formatTime } from "@payky/app-shared/format-date"
 import {
+  NO_OPTION,
   optionalIdCodec,
   optionalTextCodec,
 } from "@payky/app-shared/inline-edit-codecs"
 import {
+  setMenuDayEndHour,
   setMenuOrdering,
   setOrderDevice,
   setSelfPayBillsHidden,
+  setWrittenOrders,
+  setWrittenOrderTaxRate,
   updateSettings,
 } from "@payky/core/modules/app-settings/app-settings-actions"
 import { selfPaySettingsQuery } from "@payky/core/modules/app-settings/app-settings-queries"
+import { remembersWrittenItems } from "@payky/core/modules/app-settings/app-settings-utils"
 import { devicesQuery } from "@payky/core/modules/device/device-queries"
 import type { DeviceId } from "@payky/core/modules/device/device-types"
+import { legalEntityQuery } from "@payky/core/modules/legal-entity/legal-entity-queries"
+import { isVatPayer } from "@payky/core/modules/legal-entity/legal-entity-utils"
 import { loadSelfPayMenu } from "@payky/core/modules/menu-order/menu-order-actions"
-import { countSelfPayMenuItems } from "@payky/core/modules/menu-order/menu-order-utils"
+import {
+  countSelfPayMenuItems,
+  menuDayEndHourOf,
+} from "@payky/core/modules/menu-order/menu-order-utils"
 import { evoluHistoryMaxRowidQuery } from "@payky/core/modules/shared/evolu-history-queries"
+import { NonNegativeInteger } from "@payky/core/modules/shared/schema"
 import { tablesQuery } from "@payky/core/modules/table/table-queries"
+import { taxRatesQuery } from "@payky/core/modules/tax-rate/tax-rate-queries"
+import type { TaxRateId } from "@payky/core/modules/tax-rate/tax-rate-types"
+import {
+  filterSelectableTaxRates,
+  formatTaxRateLabel,
+} from "@payky/core/modules/tax-rate/tax-rate-utils"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { router } from "expo-router"
 import { useAtomValue } from "jotai"
@@ -55,7 +73,7 @@ import { useAppRun } from "../../../hooks/use-app-run.ts"
 import { useEvoluQuery } from "../../../hooks/use-evolu-query.ts"
 import { useInlineChoice } from "../../../hooks/use-inline-choice.ts"
 import { useRunToast } from "../../../hooks/use-run-toast.ts"
-import { useTranslation } from "../../../hooks/use-translation.ts"
+import { useLocale, useTranslation } from "../../../hooks/use-translation.ts"
 import { fontSize } from "../../../theme/tokens.ts"
 import { AlertLink, NoPaymentMethodAlert } from "./table-self-pay-card.tsx"
 import { TableStickerCheck } from "./table-sticker-check.tsx"
@@ -65,6 +83,7 @@ import {
 } from "./use-guests-cannot-pay-reason.ts"
 
 const deviceCodec = optionalIdCodec<DeviceId>()
+const taxRateCodec = optionalIdCodec<TaxRateId>()
 
 /** Self-pay options of the account, as web's `SelfPayOptionsCard`. */
 export function SelfPayOptionsCard() {
@@ -101,7 +120,10 @@ function SelfPayOptions() {
   } = useEvoluQuery(selfPaySettingsQuery)
   const billPaying = settings?.selfPayBillsHidden !== sqliteTrue
   const menuOrdering = settings?.menuOrdering === sqliteTrue
-  const optionsOn = [billPaying, menuOrdering].filter((on) => on).length
+  const writtenOrders = settings?.writtenOrders === sqliteTrue
+  const optionsOn = [billPaying, menuOrdering, writtenOrders].filter(
+    (on) => on
+  ).length
   const isLastOn = (on: boolean) => on && optionsOn === 1
   const guestsHaveNoPaymentMethod = useGuestsHaveNoPaymentMethod()
   const bankReachesGuests = useBankReachesGuests()
@@ -114,6 +136,11 @@ function SelfPayOptions() {
   const ordering = useInlineChoice(menuOrdering, (on) =>
     runToast(async (run) => {
       await run.ok(setMenuOrdering({ on, deviceId: thisDeviceId }))
+    })
+  )
+  const writing = useInlineChoice(writtenOrders, (on) =>
+    runToast(async (run) => {
+      await run.ok(setWrittenOrders({ on, deviceId: thisDeviceId }))
     })
   )
 
@@ -169,7 +196,32 @@ function SelfPayOptions() {
       </Field>
       {isLastOn(menuOrdering) && <LastGuestOptionNote />}
       {menuOrdering && <MenuStatus />}
-      {menuOrdering && (
+      <Field orientation="horizontal">
+        <Switch
+          aria-label={t("catalog.tables.selfPayOptions.written")}
+          checked={writing.value}
+          disabled={writing.saving || isLastOn(writtenOrders)}
+          onCheckedChange={(checked) => {
+            void writing.choose(checked)
+          }}
+        />
+        <FieldContent>
+          <FieldLabel>{t("catalog.tables.selfPayOptions.written")}</FieldLabel>
+          <FieldDescription>
+            {t("catalog.tables.selfPayOptions.written.description")}
+          </FieldDescription>
+        </FieldContent>
+      </Field>
+      {isLastOn(writtenOrders) && <LastGuestOptionNote />}
+      {writtenOrders && (
+        <WrittenOrderTaxRateSelect
+          taxRateId={settings?.writtenOrderTaxRateId ?? null}
+        />
+      )}
+      {remembersWrittenItems(settings) && (
+        <MenuDayEndSelect hour={menuDayEndHourOf(settings)} />
+      )}
+      {(menuOrdering || writtenOrders) && (
         <OrderDeviceSelect orderDeviceId={settings?.orderDeviceId ?? null} />
       )}
       {bankReachesGuests && (
@@ -189,6 +241,144 @@ function LastGuestOptionNote() {
     <Text mt={-8} fontSize="xs" lineHeight="xs" color="muted-foreground">
       {t("catalog.tables.selfPayOptions.lastOn")}
     </Text>
+  )
+}
+
+function WrittenOrderTaxRateSelect({
+  taxRateId,
+}: {
+  readonly taxRateId: TaxRateId | null
+}) {
+  const { t } = useTranslation()
+  const runToast = useRunToast()
+  const { data: taxRates } = useEvoluQuery(taxRatesQuery)
+  const {
+    data: [legalEntity],
+  } = useEvoluQuery(legalEntityQuery)
+  const taxRate = useInlineChoice(taxRateId, (id) =>
+    runToast(async (run) => {
+      await run.ok(setWrittenOrderTaxRate(id))
+    })
+  )
+  const options = [
+    { value: NO_OPTION, label: t("catalog.items.form.taxRate.none") },
+    ...filterSelectableTaxRates(taxRates, taxRateId).map((rate) => ({
+      value: rate.id,
+      label: `${formatTaxRateLabel(rate)}${
+        rate.deactivatedAt !== null
+          ? ` — ${t("settings.taxRates.archived.title")}`
+          : ""
+      }`,
+    })),
+  ]
+
+  return (
+    <YStack gap={16}>
+      <Field>
+        <FieldLabel>
+          {t("catalog.tables.selfPayOptions.written.taxRate.label")}
+        </FieldLabel>
+        <Select
+          value={z.encode(taxRateCodec, taxRate.value)}
+          disabled={taxRate.saving}
+          onValueChange={(value) => {
+            const parsed = z.safeDecode(taxRateCodec, value)
+            if (parsed.success) void taxRate.choose(parsed.data)
+          }}
+          items={Object.fromEntries(
+            options.map((option) => [option.value, option.label])
+          )}
+        >
+          <SelectTrigger
+            fullWidth
+            aria-label={t(
+              "catalog.tables.selfPayOptions.written.taxRate.label"
+            )}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent
+            title={t("catalog.tables.selfPayOptions.written.taxRate.label")}
+          >
+            <SelectGroup>
+              {options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      {taxRate.value === null && isVatPayer(legalEntity) && (
+        <Alert variant="warning" icon={TriangleAlert}>
+          <AlertTitle numberOfLines={0}>
+            {t("catalog.tables.selfPayOptions.written.taxRate.missing.title")}
+          </AlertTitle>
+          <AlertDescription>
+            {t(
+              "catalog.tables.selfPayOptions.written.taxRate.missing.description"
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+    </YStack>
+  )
+}
+
+const hoursOfDay = Array.from({ length: 24 }, (_, hour) => hour)
+
+function MenuDayEndSelect({ hour }: { readonly hour: number }) {
+  const { t } = useTranslation()
+  const locale = useLocale()
+  const runToast = useRunToast()
+  const dayEnd = useInlineChoice(hour, (next) =>
+    runToast(async (run) => {
+      await run.ok(setMenuDayEndHour(NonNegativeInteger(next)))
+    })
+  )
+  const options = hoursOfDay.map((value) => ({
+    value: String(value),
+    label: formatTime(new Date(2000, 0, 1, value), locale),
+  }))
+
+  return (
+    <Field>
+      <FieldLabel>
+        {t("catalog.tables.selfPayOptions.written.dayEnd.label")}
+      </FieldLabel>
+      <Select
+        value={String(dayEnd.value)}
+        disabled={dayEnd.saving}
+        onValueChange={(value) => {
+          void dayEnd.choose(Number(value))
+        }}
+        items={Object.fromEntries(
+          options.map((option) => [option.value, option.label])
+        )}
+      >
+        <SelectTrigger
+          fullWidth
+          aria-label={t("catalog.tables.selfPayOptions.written.dayEnd.label")}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent
+          title={t("catalog.tables.selfPayOptions.written.dayEnd.label")}
+        >
+          <SelectGroup>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <FieldDescription>
+        {t("catalog.tables.selfPayOptions.written.dayEnd.description")}
+      </FieldDescription>
+    </Field>
   )
 }
 

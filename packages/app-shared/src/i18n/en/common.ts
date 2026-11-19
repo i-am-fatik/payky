@@ -108,6 +108,9 @@ export const enCommon = {
   "orders.accept": "Accept",
   "orders.announced": "New order {number} · {table}",
   "orders.announced.noTable": "New order {number}",
+  "orders.announced.written":
+    "New order {number} · {table} · {amount} · {text}",
+  "orders.announced.written.noTable": "New order {number} · {amount} · {text}",
   "orders.announced.open": "Open",
   "orders.empty": "Nothing to serve.",
   "orders.line": "{quantity}× {name}",
@@ -132,6 +135,13 @@ export const enCommon = {
   "orders.reject.description":
     "The guest's money does not go back by itself. Once you reject the order, the till opens what the guest paid so you can record the refund.",
   "orders.reject.title": "Reject order {number}?",
+  "orders.remember.description":
+    "Guests can order it from the menu until {time}. You can change the name and the price.",
+  "orders.remember.forGood.description":
+    "Guests can order it from the menu every day from now on. You can change the name and the price.",
+  "orders.remember.forGood.title": "Add “{text}” to the menu for good",
+  "orders.remember.save": "Put in the menu",
+  "orders.remember.title": "Remember “{text}” for today",
   "orders.served": "Served",
   "orders.served.empty": "Nothing served today yet.",
   "orders.soldOut": "Sold out",
@@ -140,6 +150,16 @@ export const enCommon = {
   "orders.title": "To serve",
   "orders.waiting": "Orders waiting: {count}",
   "orders.waiting.badge": "New",
+  "orders.written": "Guest's text: “{text}”",
+  "orders.written.arrivedOf": "{arrived} of {named}",
+  "orders.written.addForGood": "Add to the menu for good",
+  "orders.written.keepForGood": "Keep in the menu for good",
+  "orders.written.remember": "Remember for today",
+  "orders.written.remembered": "In the menu until {time}",
+  "orders.written.taxRate": "Tax rate of “{text}”",
+  "orders.written.taxRate.locked":
+    "The order is accepted, so its tax rates no longer change.",
+  "orders.written.total": "Total {amount}",
   "passwordTextarea.hide": "Hide content",
   "passwordTextarea.show": "Show content",
   "scanner.dialog.title": "Scan code",
@@ -189,6 +209,7 @@ export const enCommon = {
   "stats.items.metric": "Rank items by",
   "stats.items.quantity": "{quantity} ×",
   "stats.items.showAll": "Show all",
+  "stats.items.written": "Written orders",
   "stats.items.showTop": "Show top 10",
   "stats.kpi.averageSale": "Average sale",
   "stats.kpi.breakdown.excess": "Excess",

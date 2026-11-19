@@ -1,20 +1,38 @@
 import { formatDateTime, formatTime } from "@payky/app-shared/format-date"
-import { toServeOrderMoney } from "@payky/app-shared/menu-order-announcement"
+import type { TranslationKey } from "@payky/app-shared/i18n/resources"
+import {
+  toServeOrderMoney,
+  writtenOrderAmount,
+} from "@payky/app-shared/menu-order-announcement"
+import { selfPaySettingsQuery } from "@payky/core/modules/app-settings/app-settings-queries"
+import { remembersWrittenItems } from "@payky/core/modules/app-settings/app-settings-utils"
+import { legalEntityQuery } from "@payky/core/modules/legal-entity/legal-entity-queries"
+import { isVatPayer } from "@payky/core/modules/legal-entity/legal-entity-utils"
 import {
   acceptMenuOrder,
   loadMenuOrdersNotFoundYet,
   loadMenuOrdersServedToday,
   loadMenuOrdersToReturn,
   loadMenuOrdersToServe,
+  type MenuOrderDecidedError,
   type MenuOrderNotFoundYet,
   type MenuOrderToReturn,
   type MenuOrderToServe,
   markMenuOrderServed,
   type RejectedMenuOrderRefund,
   rejectMenuOrder,
+  setWrittenOrderLineTaxRate,
+  type TaxRateNotOfferedError,
+  type WrittenOrderLineNotFoundError,
 } from "@payky/core/modules/menu-order/menu-order-actions"
 import { evoluHistoryMaxRowidQuery } from "@payky/core/modules/shared/evolu-history-queries"
 import type { Money } from "@payky/core/modules/shared/money"
+import { taxRatesQuery } from "@payky/core/modules/tax-rate/tax-rate-queries"
+import {
+  filterSelectableTaxRates,
+  formatTaxRateLabel,
+  taxRatePercentageToDecimalString,
+} from "@payky/core/modules/tax-rate/tax-rate-utils"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { router } from "expo-router"
 import { type ReactNode, Suspense } from "react"
@@ -38,6 +56,10 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs.tsx"
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "../../components/ui/toggle-group.tsx"
 import { useRequirePermission } from "../../core/use-access.ts"
 import { useAppRun } from "../../hooks/use-app-run.ts"
 import { useConfirm } from "../../hooks/use-confirm.ts"
@@ -46,6 +68,7 @@ import { useRunToast } from "../../hooks/use-run-toast.ts"
 import { useLocale, useTranslation } from "../../hooks/use-translation.ts"
 import { formatMoney } from "../../lib/format-money.ts"
 import { fontSize, fontWeight } from "../../theme/tokens.ts"
+import { RememberWrittenItem } from "./remember-written-item.tsx"
 
 /** Paid orders waiting to be served, as web's `OrdersToServePage`. */
 export function OrdersToServePage() {
@@ -291,26 +314,34 @@ function OrderCard({
           </XStack>
         </CardHeader>
         <CardContent gap={12}>
-          <YStack gap={4}>
-            {order.lines.map((line) => (
-              <XStack key={line.id} items="center" gap={8}>
-                <Text
-                  shrink={1}
-                  fontSize={fontSize.lg}
-                  lineHeight={fontSize.lg}
-                  fontWeight={fontWeight.medium}
-                >
-                  {t("orders.line", {
-                    name: line.name,
-                    quantity: line.quantity,
-                  })}
-                </Text>
-                {line.isSoldOut && (
-                  <Badge variant="destructive" label={t("orders.soldOut")} />
-                )}
-              </XStack>
-            ))}
-          </YStack>
+          {order.written !== null ? (
+            <WrittenOrder
+              billId={order.billId}
+              written={order.written}
+              isAccepted={order.isAccepted}
+            />
+          ) : (
+            <YStack gap={4}>
+              {order.lines.map((line) => (
+                <XStack key={line.id} items="center" gap={8}>
+                  <Text
+                    shrink={1}
+                    fontSize={fontSize.lg}
+                    lineHeight={fontSize.lg}
+                    fontWeight={fontWeight.medium}
+                  >
+                    {t("orders.line", {
+                      name: line.name,
+                      quantity: line.quantity,
+                    })}
+                  </Text>
+                  {line.isSoldOut && (
+                    <Badge variant="destructive" label={t("orders.soldOut")} />
+                  )}
+                </XStack>
+              ))}
+            </YStack>
+          )}
           {order.note !== null && (
             <Text fontSize={fontSize.sm} lineHeight={fontSize.sm}>
               {t("orders.note", { note: order.note })}
@@ -319,6 +350,155 @@ function OrderCard({
         </CardContent>
         {children}
       </Card>
+    </YStack>
+  )
+}
+
+function WrittenOrder({
+  billId,
+  written,
+  isAccepted,
+}: {
+  readonly billId: MenuOrderToServe["billId"]
+  readonly written: NonNullable<MenuOrderToServe["written"]>
+  readonly isAccepted: boolean
+}) {
+  const {
+    data: [legalEntity],
+  } = useEvoluQuery(legalEntityQuery)
+  const {
+    data: [selfPaySettings],
+  } = useEvoluQuery(selfPaySettingsQuery)
+  const { t } = useTranslation()
+  const locale = useLocale()
+  const amount = (money: Pick<typeof written, "arrived" | "named">) =>
+    writtenOrderAmount(money, t, (value) => formatMoney(value, locale))
+
+  return (
+    <>
+      {written.lines.map((line) => (
+        <YStack key={line.id} gap={2}>
+          <Text
+            fontSize={fontSize.lg}
+            lineHeight={fontSize.lg}
+            fontWeight={fontWeight.medium}
+          >
+            {t("orders.written", { text: line.text })}
+          </Text>
+          <Text
+            fontSize={fontSize.sm}
+            lineHeight={fontSize.sm}
+            fontVariant={["tabular-nums"]}
+          >
+            {amount(line)}
+          </Text>
+          {isVatPayer(legalEntity) ? (
+            <WrittenLineTaxRate
+              billId={billId}
+              line={line}
+              isAccepted={isAccepted}
+            />
+          ) : null}
+          {remembersWrittenItems(selfPaySettings) ? (
+            <RememberWrittenItem billId={billId} line={line} />
+          ) : null}
+        </YStack>
+      ))}
+      {written.lines.length > 1 ? (
+        <Text
+          fontSize={fontSize.sm}
+          lineHeight={fontSize.sm}
+          fontWeight={fontWeight.medium}
+          fontVariant={["tabular-nums"]}
+        >
+          {t("orders.written.total", { amount: amount(written) })}
+        </Text>
+      ) : null}
+    </>
+  )
+}
+
+const taxRateErrorKeys = {
+  MenuOrderDecided: "orders.written.taxRate.locked",
+  WrittenOrderLineNotFound: "app.saveFailed",
+  TaxRateNotOffered: "app.saveFailed",
+} satisfies Record<
+  | MenuOrderDecidedError["type"]
+  | WrittenOrderLineNotFoundError["type"]
+  | TaxRateNotOfferedError["type"],
+  TranslationKey
+>
+
+function WrittenLineTaxRate({
+  billId,
+  line,
+  isAccepted,
+}: {
+  readonly billId: MenuOrderToServe["billId"]
+  readonly line: NonNullable<MenuOrderToServe["written"]>["lines"][number]
+  readonly isAccepted: boolean
+}) {
+  const { t } = useTranslation()
+  const runToast = useRunToast()
+  const { data: taxRates } = useEvoluQuery(taxRatesQuery)
+  const rates = filterSelectableTaxRates(taxRates, line.taxRateId)
+
+  if (isAccepted) {
+    const rate = rates.find(({ id }) => id === line.taxRateId)
+    return (
+      <Text
+        fontSize={fontSize.sm}
+        lineHeight={fontSize.sm}
+        color="muted-foreground"
+      >
+        {rate === undefined
+          ? t("catalog.items.form.taxRate.none")
+          : formatTaxRateLabel(rate)}
+      </Text>
+    )
+  }
+
+  return (
+    <YStack mt={4} gap={4}>
+      <Text
+        fontSize={fontSize.xs}
+        lineHeight={fontSize.xs}
+        color="muted-foreground"
+      >
+        {t("catalog.items.form.taxRate.label")}
+      </Text>
+      <ToggleGroup
+        aria-label={t("orders.written.taxRate", { text: line.text })}
+        variant="outline"
+        size="sm"
+        spacing={0}
+        value={line.taxRateId}
+        onValueChange={(value) => {
+          const rate = rates.find(({ id }) => id === value)
+          if (rate === undefined) return
+          void runToast(async (run) => {
+            const result = await run(
+              setWrittenOrderLineTaxRate({
+                billId,
+                lineId: line.id,
+                taxRateId: rate.id,
+              })
+            )
+            if (!result.ok) return taxRateErrorKeys[result.error.type]
+          })
+        }}
+      >
+        {rates.map((rate) => (
+          <ToggleGroupItem
+            key={rate.id}
+            value={rate.id}
+            aria-label={formatTaxRateLabel(rate)}
+            flex={1}
+          >
+            {`${taxRatePercentageToDecimalString(rate.rate)}%`}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
     </YStack>
   )
 }

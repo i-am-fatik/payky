@@ -8,7 +8,8 @@ import { useEffect } from "react"
 import { View } from "tamagui"
 import { waitingOrdersNoticeHeightAtom } from "../../atoms/toast.ts"
 import { useEvoluQuery } from "../../hooks/use-evolu-query.ts"
-import { useTranslation } from "../../hooks/use-translation.ts"
+import { useLocale, useTranslation } from "../../hooks/use-translation.ts"
+import { formatMoney } from "../../lib/format-money.ts"
 import { Toast } from "../ui/toast.tsx"
 
 /** Web's `MenuOrderAnnouncer`, for an onboarded account. */
@@ -21,10 +22,16 @@ export function MenuOrderAnnouncer() {
 
 function WaitingOrdersToast() {
   const { t } = useTranslation()
+  const locale = useLocale()
   const onOrders = usePathname() === "/orders"
   const { data: orders } = useEvoluQuery(menuOrdersToServeQuery)
   const { data: tables } = useEvoluQuery(tablesQuery)
-  const notice = waitingMenuOrdersNotice({ orders, tables, t })
+  const notice = waitingMenuOrdersNotice({
+    orders,
+    tables,
+    t,
+    formatMoney: (money) => formatMoney(money, locale),
+  })
 
   const shown = !onOrders && notice !== null
   const setNoticeHeight = useSetAtom(waitingOrdersNoticeHeightAtom)

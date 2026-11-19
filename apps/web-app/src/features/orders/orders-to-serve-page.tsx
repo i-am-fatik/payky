@@ -1,19 +1,37 @@
-import { toServeOrderMoney } from "@payky/app-shared/menu-order-announcement"
+import type { TranslationKey } from "@payky/app-shared/i18n/resources"
+import {
+  toServeOrderMoney,
+  writtenOrderAmount,
+} from "@payky/app-shared/menu-order-announcement"
+import { selfPaySettingsQuery } from "@payky/core/modules/app-settings/app-settings-queries"
+import { remembersWrittenItems } from "@payky/core/modules/app-settings/app-settings-utils"
+import { legalEntityQuery } from "@payky/core/modules/legal-entity/legal-entity-queries"
+import { isVatPayer } from "@payky/core/modules/legal-entity/legal-entity-utils"
 import {
   acceptMenuOrder,
   loadMenuOrdersNotFoundYet,
   loadMenuOrdersServedToday,
   loadMenuOrdersToReturn,
   loadMenuOrdersToServe,
+  type MenuOrderDecidedError,
   type MenuOrderNotFoundYet,
   type MenuOrderToReturn,
   type MenuOrderToServe,
   markMenuOrderServed,
   type RejectedMenuOrderRefund,
   rejectMenuOrder,
+  setWrittenOrderLineTaxRate,
+  type TaxRateNotOfferedError,
+  type WrittenOrderLineNotFoundError,
 } from "@payky/core/modules/menu-order/menu-order-actions"
 import { evoluHistoryMaxRowidQuery } from "@payky/core/modules/shared/evolu-history-queries"
 import type { Money } from "@payky/core/modules/shared/money"
+import { taxRatesQuery } from "@payky/core/modules/tax-rate/tax-rate-queries"
+import {
+  filterSelectableTaxRates,
+  formatTaxRateLabel,
+  taxRatePercentageToDecimalString,
+} from "@payky/core/modules/tax-rate/tax-rate-utils"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { type ReactNode, Suspense } from "react"
@@ -36,6 +54,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs.tsx"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.tsx"
 import { useRequirePermission } from "@/hooks/use-access.ts"
 import { useAppRun } from "@/hooks/use-app-run.ts"
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog.ts"
@@ -44,6 +63,7 @@ import { useLocale } from "@/hooks/use-locale.ts"
 import { useRunToast } from "@/hooks/use-run-toast.ts"
 import { useTranslation } from "@/hooks/use-translation.ts"
 import { formatDateTime, formatMoney, formatTime } from "@/lib/format-utils.ts"
+import { RememberWrittenItem } from "./remember-written-item.tsx"
 
 export function OrdersToServePage() {
   const { t } = useTranslation()
@@ -277,27 +297,164 @@ function OrderCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <ul className="flex flex-col gap-1">
-          {order.lines.map((line) => (
-            <li key={line.id} className="flex items-center gap-2">
-              <span className="text-lg font-medium">
-                {t("orders.line", {
-                  name: line.name,
-                  quantity: line.quantity,
-                })}
-              </span>
-              {line.isSoldOut && (
-                <Badge variant="destructive">{t("orders.soldOut")}</Badge>
-              )}
-            </li>
-          ))}
-        </ul>
+        {order.written !== null ? (
+          <WrittenOrder
+            billId={order.billId}
+            written={order.written}
+            isAccepted={order.isAccepted}
+          />
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {order.lines.map((line) => (
+              <li key={line.id} className="flex items-center gap-2">
+                <span className="text-lg font-medium">
+                  {t("orders.line", {
+                    name: line.name,
+                    quantity: line.quantity,
+                  })}
+                </span>
+                {line.isSoldOut && (
+                  <Badge variant="destructive">{t("orders.soldOut")}</Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
         {order.note !== null && (
           <p className="text-sm">{t("orders.note", { note: order.note })}</p>
         )}
       </CardContent>
       {children}
     </Card>
+  )
+}
+
+function WrittenOrder({
+  billId,
+  written,
+  isAccepted,
+}: {
+  readonly billId: MenuOrderToServe["billId"]
+  readonly written: NonNullable<MenuOrderToServe["written"]>
+  readonly isAccepted: boolean
+}) {
+  const { t } = useTranslation()
+  const locale = useLocale()
+  const {
+    data: [legalEntity],
+  } = useEvoluQuery(legalEntityQuery)
+  const {
+    data: [selfPaySettings],
+  } = useEvoluQuery(selfPaySettingsQuery)
+  const amount = (money: Pick<typeof written, "arrived" | "named">) =>
+    writtenOrderAmount(money, t, (value) => formatMoney(value, locale))
+
+  return (
+    <>
+      <ul className="flex flex-col gap-2">
+        {written.lines.map((line) => (
+          <li key={line.id} className="flex flex-col gap-0.5">
+            <span className="text-lg font-medium wrap-anywhere">
+              {t("orders.written", { text: line.text })}
+            </span>
+            <span className="text-sm tabular-nums">{amount(line)}</span>
+            {isVatPayer(legalEntity) ? (
+              <WrittenLineTaxRate
+                billId={billId}
+                line={line}
+                isAccepted={isAccepted}
+              />
+            ) : null}
+            {remembersWrittenItems(selfPaySettings) ? (
+              <RememberWrittenItem billId={billId} line={line} />
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {written.lines.length > 1 ? (
+        <p className="text-sm font-medium tabular-nums">
+          {t("orders.written.total", { amount: amount(written) })}
+        </p>
+      ) : null}
+    </>
+  )
+}
+
+const taxRateErrorKeys = {
+  MenuOrderDecided: "orders.written.taxRate.locked",
+  WrittenOrderLineNotFound: "app.saveFailed",
+  TaxRateNotOffered: "app.saveFailed",
+} satisfies Record<
+  | MenuOrderDecidedError["type"]
+  | WrittenOrderLineNotFoundError["type"]
+  | TaxRateNotOfferedError["type"],
+  TranslationKey
+>
+
+function WrittenLineTaxRate({
+  billId,
+  line,
+  isAccepted,
+}: {
+  readonly billId: MenuOrderToServe["billId"]
+  readonly line: NonNullable<MenuOrderToServe["written"]>["lines"][number]
+  readonly isAccepted: boolean
+}) {
+  const { t } = useTranslation()
+  const runToast = useRunToast()
+  const { data: taxRates } = useEvoluQuery(taxRatesQuery)
+  const rates = filterSelectableTaxRates(taxRates, line.taxRateId)
+
+  if (isAccepted) {
+    const rate = rates.find(({ id }) => id === line.taxRateId)
+    return (
+      <span className="text-sm text-muted-foreground">
+        {rate === undefined
+          ? t("catalog.items.form.taxRate.none")
+          : formatTaxRateLabel(rate)}
+      </span>
+    )
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">
+        {t("catalog.items.form.taxRate.label")}
+      </span>
+      <ToggleGroup
+        aria-label={t("orders.written.taxRate", { text: line.text })}
+        className="w-full"
+        variant="outline"
+        size="sm"
+        spacing={0}
+        value={line.taxRateId === null ? [] : [line.taxRateId]}
+        onValueChange={(values) => {
+          const rate = rates.find(({ id }) => id === values[0])
+          if (rate === undefined) return
+          void runToast(async (run) => {
+            const result = await run(
+              setWrittenOrderLineTaxRate({
+                billId,
+                lineId: line.id,
+                taxRateId: rate.id,
+              })
+            )
+            if (!result.ok) return taxRateErrorKeys[result.error.type]
+          })
+        }}
+      >
+        {rates.map((rate) => (
+          <ToggleGroupItem
+            key={rate.id}
+            value={rate.id}
+            aria-label={formatTaxRateLabel(rate)}
+            className="flex-1 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90"
+          >
+            {`${taxRatePercentageToDecimalString(rate.rate)}%`}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
   )
 }
 

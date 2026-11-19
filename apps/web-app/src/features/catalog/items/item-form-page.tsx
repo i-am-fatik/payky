@@ -43,6 +43,7 @@ import {
   findCatalogItemsByScanCode,
   getStaffDisplayName,
   isDiscountPrice,
+  isInMenu,
 } from "@payky/core/modules/catalog-item/catalog-item-utils"
 import { legalEntityQuery } from "@payky/core/modules/legal-entity/legal-entity-queries"
 import {
@@ -104,9 +105,11 @@ import {
   usePreloadEvoluQueries,
 } from "@/hooks/use-evolu-query.ts"
 import { useHardwareScanner } from "@/hooks/use-hardware-scanner.ts"
+import { useLocale } from "@/hooks/use-locale.ts"
 import { useRunToast } from "@/hooks/use-run-toast.ts"
 import { useSettingsForm } from "@/hooks/use-settings-form.ts"
 import { useTranslation } from "@/hooks/use-translation.ts"
+import { formatTime } from "@/lib/format-utils.ts"
 
 const taxRateCodec = optionalIdCodec<TaxRateId>()
 const currencyCodec = FiatCurrencySchema
@@ -923,8 +926,9 @@ function InlineEditCategory({
 
 function CatalogItemMenuCard({ item }: { readonly item: CatalogItemRow }) {
   const { t } = useTranslation()
+  const locale = useLocale()
   const appRun = useAppRun()
-  const inMenu = item.inMenu !== null
+  const inMenu = isInMenu(item, new Date())
 
   const saveInMenu = async (checked: boolean) => {
     await using run = appRun()
@@ -947,6 +951,13 @@ function CatalogItemMenuCard({ item }: { readonly item: CatalogItemRow }) {
       <CardContent className="flex flex-col gap-4">
         <InlineEditSwitch
           label={t("catalog.items.form.inMenu.label")}
+          description={
+            inMenu && item.inMenuUntil !== null
+              ? t("catalog.items.form.inMenu.until", {
+                  time: formatTime(new Date(item.inMenuUntil), locale),
+                })
+              : undefined
+          }
           defaultValue={inMenu}
           onSave={saveInMenu}
         />

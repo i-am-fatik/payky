@@ -23,10 +23,12 @@ import {
 
 import { loadBillClosedAtIfCovered } from "../bill/bill-guards.ts"
 import type { BillId } from "../bill/bill-types.ts"
+import { updateBillLineTotal } from "../bill-line/bill-line-actions.ts"
 import type { DeviceId } from "../device/device-types.ts"
 import {
   type MenuOrderArrivalRows,
   upsertMenuOrderRows,
+  type WrittenOrderRest,
 } from "../menu-order/menu-order-actions.ts"
 import { paymentBillCoverageByIdQuery } from "../payment/payment-queries.ts"
 import {
@@ -199,6 +201,7 @@ export interface AutomaticReconciliation {
   readonly selfPayPayment: SelfPayPaymentRows | null
   readonly selfPayAllocations: ReadonlyArray<SelfPayAllocationWrite>
   readonly menuOrder: MenuOrderArrivalRows | null
+  readonly writtenOrderRest: ReadonlyArray<WrittenOrderRest> | null
 }
 
 const loadSelfPayReconciliation =
@@ -209,7 +212,12 @@ const loadSelfPayReconciliation =
     const arrival = await run.ok(loadSelfPayArrival(transaction))
     if (arrival === null) return ok(null)
 
-    const { rows: selfPayPayment, allocations, order } = arrival
+    const {
+      rows: selfPayPayment,
+      allocations,
+      order,
+      writtenOrderRest,
+    } = arrival
     const { payment } = selfPayPayment
     const billClosing =
       order !== null && payment.amount >= order.total
@@ -245,6 +253,7 @@ const loadSelfPayReconciliation =
       selfPayPayment,
       selfPayAllocations: allocations,
       menuOrder: order,
+      writtenOrderRest,
     })
   }
 
@@ -306,6 +315,7 @@ export const loadAutomaticReconciliation =
       selfPayPayment: null,
       selfPayAllocations: [],
       menuOrder: null,
+      writtenOrderRest: null,
     })
   }
 
@@ -340,6 +350,7 @@ export const upsertAutomaticReconciliationRows = (
     selfPayPayment,
     selfPayAllocations,
     menuOrder,
+    writtenOrderRest,
   }: AutomaticReconciliation,
   options: MutationOptions
 ): void => {
@@ -351,6 +362,9 @@ export const upsertAutomaticReconciliationRows = (
       options
     )
     upsertMenuOrderRows(evolu, menuOrder.menuOrder, options)
+  }
+  for (const { lineId, totalAmount } of writtenOrderRest ?? []) {
+    updateBillLineTotal(evolu, lineId, totalAmount, options)
   }
   if (selfPayPayment !== null) {
     upsertSelfPayPaymentRows(evolu, selfPayPayment, options)

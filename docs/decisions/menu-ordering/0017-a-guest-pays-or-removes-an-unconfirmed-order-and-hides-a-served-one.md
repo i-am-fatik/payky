@@ -55,3 +55,4 @@ warning; staff resolve the doubly paid order as any overpaid bill
 - `apps/web-app/e2e/table-self-pay-menu.spec.ts > a guest who leaves an order's payment is offered to pay it from the order at once and after the wait, and sees it paid`
 - `apps/web-app/e2e/table-self-pay-menu.spec.ts > a guest who leaves an order's payment removes the order at once, and it stays gone after reopening the page`
 - `apps/web-app/e2e/table-self-pay-menu.spec.ts > a guest who paid an order short sees what is left, also after reopening the page and once it is served, pays the rest and may hide it`
+- `apps/web-app/e2e/written-orders.spec.ts > staff see New order 1 · Bar · $90.00 · 2x pivo, accept it and mark it served, and the guest sees both and hides it`

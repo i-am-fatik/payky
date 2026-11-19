@@ -46,7 +46,7 @@ export const menuOrderByBillIdQuery = (billId: BillId) =>
   createQuery((db) =>
     db
       .selectFrom("menuOrder")
-      .select(["id", "pointer", "acceptedAt", "rejectedAt"])
+      .select(["id", "pointer", "writtenAmount", "acceptedAt", "rejectedAt"])
       .where("billId", "=", billId)
       .where("isDeleted", "is not", sqliteTrue)
   )
@@ -98,12 +98,29 @@ const selectListedMenuOrders = (db: QueryDb) =>
       "menuOrder.pointer",
       "menuOrder.number",
       "menuOrder.note",
+      "menuOrder.writtenAmount",
       "menuOrder.acceptedAt",
       "menuOrder.servedAt",
       "menuOrder.createdAt",
       "bill.tableId",
       "bill.currency",
     ])
+    .select((eb) => {
+      const writtenLines = eb
+        .selectFrom("billLine")
+        .innerJoin("item", "item.id", "billLine.itemId")
+        .whereRef("billLine.billId", "=", "menuOrder.billId")
+        .where("menuOrder.writtenAmount", "is not", null)
+        .where("billLine.isDeleted", "is not", sqliteTrue)
+      return [
+        writtenLines
+          .select(sql<string>`group_concat("item"."name", ', ')`.as("text"))
+          .as("writtenText"),
+        writtenLines
+          .select(sql<number>`sum("billLine"."totalAmount")`.as("arrived"))
+          .as("writtenArrived"),
+      ]
+    })
     .where("menuOrder.isDeleted", "is not", sqliteTrue)
     .where("menuOrder.rejectedAt", "is", null)
     .where("menuOrder.billId", "is not", null)
@@ -140,6 +157,7 @@ export const recentMenuOrdersQuery = (createdSince: DateIso) =>
         "billId",
         "pointer",
         "number",
+        "writtenAmount",
         "acceptedAt",
         "servedAt",
         "rejectedAt",

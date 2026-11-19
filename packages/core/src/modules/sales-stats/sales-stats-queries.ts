@@ -461,6 +461,12 @@ const nettedBillLines = (
       kyselySql<string>`"item"."name"`.as("name"),
       kyselySql<string>`"item"."createdAt"`.as("itemCreatedAt"),
       "item.taxRateId",
+      kyselySql<number>`exists (
+        select 1 from "menuOrder"
+        where "menuOrder"."billId" = "bill"."id"
+          and "menuOrder"."writtenAmount" is not null
+          and "menuOrder"."isDeleted" is not ${sqliteTrue}
+      )`.as("written"),
       // One `item` per group, so its price is every line's.
       kyselySql<0 | 1>`"item"."unitAmount" < 0`.as("isDiscount"),
       signedLine("quantity").as("quantity"),
@@ -506,6 +512,7 @@ const nettedBillLines = (
         "keptLine.name",
         "keptLine.itemCreatedAt",
         "keptLine.taxRateId",
+        "keptLine.written",
         "keptLine.isDiscount",
         kyselySql<number>`sum("keptLine"."quantity")`.as("quantity"),
         kyselySql<number>`sum("keptLine"."totalAmount")`.as("totalAmount"),
@@ -524,9 +531,9 @@ const nettedBillLines = (
 /**
  * What closed bills sold, by `closedAt`, per product: grouped by
  * `catalogItemId` when the line has one (one product across price changes),
- * else by its frozen `itemId`. `name`/`itemId` are the newest `item`
- * snapshot's. Does not add up to net revenue (keypad sales, tips, partial
- * and over/under payments).
+ * else by its frozen `itemId`, and written orders as one row. `name`/`itemId`
+ * are the newest `item` snapshot's. Does not add up to net revenue (keypad
+ * sales, tips, partial and over/under payments).
  *
  * `isDiscount` is 1 for a discount (an item priced below zero, catalog/0002),
  * whose `amount` is below zero: the leaderboard shows discounts apart instead
@@ -545,13 +552,15 @@ export const itemSalesQuery = (range: StatsRange) =>
         "line.itemId",
         "line.name",
         "line.currency",
+        "line.written",
         // Not `max()`: a second one would unpin the bare columns above.
         kyselySql<0 | 1>`sum("line"."isDiscount") > 0`.as("isDiscount"),
         kyselySql<number>`sum("line"."quantity")`.as("quantity"),
         kyselySql<number>`sum("line"."totalAmount")`.as("amount"),
       ])
       .groupBy([
-        kyselySql`coalesce("line"."catalogItemId", "line"."itemId")`,
+        kyselySql`case when "line"."written" then 'written'
+          else coalesce("line"."catalogItemId", "line"."itemId") end`,
         "line.currency",
       ])
       .orderBy("amount", "desc")

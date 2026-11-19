@@ -30,8 +30,8 @@ Relays see one event per order and its confirmation, so they can count
 orders and their times, but not which table ordered or what. The confirmation
 changes as staff accept, serve or reject the order (`menu-ordering/0006`).
 
-The owner switches bill paying off only while guests order from the menu
-(`menu-ordering/0021`).
+The owner switches bill paying off only while guests order from the menu or
+write what they pay for (`menu-ordering/0021`).
 
 ## Enforced by
 

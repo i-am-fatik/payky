@@ -328,6 +328,22 @@ export const csBill = {
   "selfPay.unavailable.description":
     "Zkuste to za chvíli znovu, nebo se obraťte na obsluhu.",
   "selfPay.unavailable.title": "Stránka stolu teď není dostupná",
+  "selfPay.written.amount.label": "Částka",
+  "selfPay.written.amount.missing": "Doplňte částku.",
+  "selfPay.written.amount.missing.item": "Doplňte částku u položky {number}",
+  "selfPay.written.amount.tooHigh": "Největší částka je {amount}.",
+  "selfPay.written.amount.tooLow": "Nejmenší částka je {amount}.",
+  "selfPay.written.add": "Přidat další položku",
+  "selfPay.written.back": "Zpět k psaní",
+  "selfPay.written.nothing": "Napište, co platíte, a částku",
+  "selfPay.written.onBill": "Platíte něco, co už je na účtu stolu?",
+  "selfPay.written.onBill.open": "Zaplatit v Účtu",
+  "selfPay.written.remove": "Odebrat položku {number}",
+  "selfPay.written.summary": "Platíte {amount}",
+  "selfPay.written.tab": "Napsat",
+  "selfPay.written.text.label": "Co platíte?",
+  "selfPay.written.text.unreadable":
+    "Text obsahuje znak, který nejde zobrazit. Napište ho prosím znovu.",
   "selfPay.waiting": "Restaurace platbu potvrdí, jakmile peníze dorazí.",
   "selfPay.waiting.over.announcement": "{title}. {description}",
   "selfPay.waiting.over.description":

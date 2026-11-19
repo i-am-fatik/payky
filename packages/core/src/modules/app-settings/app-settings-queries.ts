@@ -31,7 +31,10 @@ export const selfPaySettingsQuery = createQuery((db) =>
       "selfPayGuestName",
       "selfPayBillsHidden",
       "menuOrdering",
+      "writtenOrders",
+      "writtenOrderTaxRateId",
       "orderDeviceId",
+      "menuDayEndHour",
     ])
     .where("id", "=", settingsId)
 )

@@ -646,6 +646,7 @@ export const csSettings = {
     "Tato položka je sleva: částka se odečte od účtu. Jestli je položka sleva, jde nastavit jen při jejím přidání.",
   "catalog.items.form.discount.label": "Sleva",
   "catalog.items.form.inMenu.label": "V menu",
+  "catalog.items.form.inMenu.until": "Z menu zmizí v {time}",
   "catalog.items.form.internalDescription.invalid":
     "Interní popis je příliš dlouhý (max. 255 znaků).",
   "catalog.items.form.internalDescription.label": "Interní popis",
@@ -1190,6 +1191,19 @@ export const csSettings = {
   "catalog.tables.selfPayOptions.orderDevice.placeholder": "Vyberte zařízení",
   "catalog.tables.selfPayOptions.orderDevice.this": "{name} (toto zařízení)",
   "catalog.tables.selfPayOptions.payBill": "Hosté platí účet stolu",
+  "catalog.tables.selfPayOptions.written": "Hosté píšou, co platí",
+  "catalog.tables.selfPayOptions.written.dayEnd.description":
+    "Obsluha může napsanou položku hosta dát na dnešek do menu. V tuto hodinu z menu zmizí.",
+  "catalog.tables.selfPayOptions.written.dayEnd.label":
+    "Položky zapamatované na dnešek zmizí z menu v",
+  "catalog.tables.selfPayOptions.written.description":
+    "Host u stolu napíše, co platí, položku po položce, každou s vlastní částkou. {appName} kontroluje jen to, že peníze přišly. Každá napsaná položka dostane sazbu daně vybranou níže. Jste-li plátce DPH, obsluha ji může změnit, dokud objednávku nepřijme.",
+  "catalog.tables.selfPayOptions.written.taxRate.label":
+    "Výchozí sazba daně napsané položky",
+  "catalog.tables.selfPayOptions.written.taxRate.missing.description":
+    "Jako plátce DPH vyberte výchozí sazbu daně napsané položky. Do té doby hosté psát nemohou.",
+  "catalog.tables.selfPayOptions.written.taxRate.missing.title":
+    "Hosté zatím psát nemohou",
   "catalog.tables.selfPayOptions.title": "QR kódy na stolech",
   "catalog.tables.selfPayOptions.withQrCode":
     "Stolů s QR kódem: {count} z {total}",
@@ -1314,6 +1328,7 @@ export const csSettings = {
   "access.action.confirmPaidDespiteCancellation":
     "Označit zrušenou platbu jako zaplacenou",
   "access.action.createItem": "Vytvořit položku katalogu",
+  "access.action.rememberItem": "Dát položku hosta do menu",
   "access.action.disable": "Vypnout řízení přístupu",
   "access.action.exportDatabase": "Exportovat databázi aplikace",
   "access.action.revealRecoveryPhrase": "Zobrazit obnovovací frázi",
