@@ -110,6 +110,10 @@ export const skCommon = {
   "orders.accept": "Prijať",
   "orders.announced": "Nová objednávka {number} · {table}",
   "orders.announced.noTable": "Nová objednávka {number}",
+  "orders.announced.written":
+    "Nová objednávka {number} · {table} · {amount} · {text}",
+  "orders.announced.written.noTable":
+    "Nová objednávka {number} · {amount} · {text}",
   "orders.announced.open": "Otvoriť",
   "orders.empty": "Nie je čo vydať.",
   "orders.line": "{quantity}× {name}",
@@ -134,6 +138,13 @@ export const skCommon = {
   "orders.reject.description":
     "Peniaze sa hosťovi samy nevrátia. Po odmietnutí pokladňa otvorí, čo hosť zaplatil, a vrátenie tam zaznamenáte.",
   "orders.reject.title": "Odmietnuť objednávku {number}?",
+  "orders.remember.description":
+    "Hostia si ju môžu objednať z menu do {time}. Názov aj cenu môžete zmeniť.",
+  "orders.remember.forGood.description":
+    "Hostia si ju odteraz môžu objednať z menu každý deň. Názov aj cenu môžete zmeniť.",
+  "orders.remember.forGood.title": "Pridať „{text}“ do menu natrvalo",
+  "orders.remember.save": "Dať do menu",
+  "orders.remember.title": "Zapamätať „{text}“ na dnešok",
   "orders.served": "Vydať",
   "orders.served.empty": "Dnes zatiaľ nič vydané.",
   "orders.soldOut": "Vypredané",
@@ -142,6 +153,16 @@ export const skCommon = {
   "orders.title": "Na výdaj",
   "orders.waiting": "Čakajúce objednávky: {count}",
   "orders.waiting.badge": "Nové",
+  "orders.written": "Text hosťa: „{text}“",
+  "orders.written.arrivedOf": "{arrived} z {named}",
+  "orders.written.addForGood": "Pridať do menu natrvalo",
+  "orders.written.keepForGood": "Ponechať v menu natrvalo",
+  "orders.written.remember": "Zapamätať na dnešok",
+  "orders.written.remembered": "V menu do {time}",
+  "orders.written.taxRate": "Sadzba DPH položky „{text}“",
+  "orders.written.taxRate.locked":
+    "Objednávka je prijatá, sadzby sa už nedajú zmeniť.",
+  "orders.written.total": "Spolu {amount}",
   "passwordTextarea.hide": "Skryť obsah",
   "passwordTextarea.show": "Zobraziť obsah",
   "scanner.dialog.title": "Naskenovať kód",
@@ -191,6 +212,7 @@ export const skCommon = {
   "stats.items.metric": "Zoradiť položky",
   "stats.items.quantity": "{quantity} ×",
   "stats.items.showAll": "Zobraziť všetko",
+  "stats.items.written": "Písané objednávky",
   "stats.items.showTop": "Zobraziť prvých 10",
   "stats.kpi.averageSale": "Priemerný predaj",
   "stats.kpi.breakdown.excess": "Prebytok",

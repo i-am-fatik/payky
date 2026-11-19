@@ -11,14 +11,23 @@ import {
 } from "../../integrations/nostr/nostr-event.ts"
 import type { NostrFilter } from "../../integrations/nostr/nostr-relay-client.ts"
 import { jsonCodec } from "../../zod-utils.ts"
+import type { AppSettingsRow } from "../app-settings/app-settings.ts"
 import type { CatalogCategoryRow } from "../catalog-category/catalog-category.ts"
 import type { CatalogItemRow } from "../catalog-item/catalog-item.ts"
-import { FiatCurrencySchema, HexSchema } from "../shared/schema.ts"
+import { isInMenu } from "../catalog-item/catalog-item-utils.ts"
+import type { Money } from "../shared/money.ts"
+import {
+  type FiatCurrency,
+  FiatCurrencySchema,
+  HexSchema,
+  Integer,
+} from "../shared/schema.ts"
 import {
   createSelfPaySelectionNonce,
   deriveSelfPayPointerKeys,
 } from "../table-self-pay/table-self-pay-pointer-utils.ts"
 import type { SelfPayPointer } from "../table-self-pay/table-self-pay-reference-utils.ts"
+import { selfPayMinimum } from "../table-self-pay/table-self-pay-share-utils.ts"
 import {
   decryptSelfPayContent,
   deriveSelfPayLivenessTag,
@@ -29,6 +38,50 @@ import {
 
 export const MAX_ORDER_NOTE_LENGTH = 140
 export const MAX_ORDER_QUANTITY = 99
+export const MAX_WRITTEN_TEXT_LENGTH = 255
+export const MAX_WRITTEN_AMOUNT = 999_999_999
+export const MAX_WRITTEN_LINES = 20
+
+const UNREADABLE_WRITTEN_CODE_POINTS = [
+  [0x0000, 0x001f],
+  [0x007f, 0x009f],
+  [0x00ad, 0x00ad],
+  [0x034f, 0x034f],
+  [0x0600, 0x0605],
+  [0x061c, 0x061c],
+  [0x06dd, 0x06dd],
+  [0x070f, 0x070f],
+  [0x0890, 0x0891],
+  [0x08e2, 0x08e2],
+  [0x115f, 0x1160],
+  [0x17b4, 0x17b5],
+  [0x180e, 0x180e],
+  [0x200b, 0x200c],
+  [0x200e, 0x200f],
+  [0x2028, 0x202e],
+  [0x2060, 0x206f],
+  [0x2800, 0x2800],
+  [0x3164, 0x3164],
+  [0xd800, 0xdfff],
+  [0xfeff, 0xfeff],
+  [0xffa0, 0xffa0],
+  [0xfff9, 0xfffb],
+  [0x110bd, 0x110bd],
+  [0x110cd, 0x110cd],
+  [0x13430, 0x1343f],
+  [0x1bca0, 0x1bca3],
+  [0x1d173, 0x1d17a],
+  [0xe0001, 0xe0001],
+  [0xe0020, 0xe007f],
+] as const
+
+const isReadableWrittenText = (text: string): boolean =>
+  [...text].every((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return !UNREADABLE_WRITTEN_CODE_POINTS.some(
+      ([from, to]) => codePoint >= from && codePoint <= to
+    )
+  })
 
 const MENU_ITEM_KEY_BYTES = 5
 const MENU_VERSION_BYTES = 16
@@ -45,6 +98,7 @@ export const SelfPayMenuSchema = z.object({
   v: z.literal(1),
   version: HexSchema(MENU_VERSION_BYTES),
   currency: FiatCurrencySchema,
+  written: z.boolean().default(false),
   categories: z.array(
     z.object({
       name: z.string().nullable(),
@@ -85,6 +139,46 @@ export const SelfPayOrderSelectionSchema = z.object({
 })
 export type SelfPayOrderSelection = z.output<typeof SelfPayOrderSelectionSchema>
 
+export const WrittenOrderTextSchema = z
+  .string()
+  .min(1)
+  .refine((text) => text.length <= MAX_WRITTEN_TEXT_LENGTH)
+  .refine((text) => text === text.trim())
+  .refine(isReadableWrittenText)
+
+const WrittenOrderLineSchema = z.object({
+  text: WrittenOrderTextSchema,
+  amount: z.number().int().positive(),
+})
+export type WrittenOrderLine = z.output<typeof WrittenOrderLineSchema>
+
+export const writtenOrderTotal = (
+  lines: ReadonlyArray<WrittenOrderLine>
+): number => lines.reduce((sum, { amount }) => sum + amount, 0)
+
+export const SelfPayWrittenSelectionSchema = z.object({
+  v: z.literal(1),
+  kind: z.literal("written"),
+  nonce: HexSchema(16),
+  table: HexSchema(32),
+  menu: HexSchema(MENU_VERSION_BYTES),
+  lines: z
+    .array(WrittenOrderLineSchema)
+    .min(1)
+    .max(MAX_WRITTEN_LINES)
+    .refine((lines) => writtenOrderTotal(lines) <= MAX_WRITTEN_AMOUNT)
+    .readonly(),
+})
+export type SelfPayWrittenSelection = z.output<
+  typeof SelfPayWrittenSelectionSchema
+>
+
+export const SelfPayOrderIntentSchema = z.discriminatedUnion("kind", [
+  SelfPayOrderSelectionSchema,
+  SelfPayWrittenSelectionSchema,
+])
+export type SelfPayOrderIntent = z.output<typeof SelfPayOrderIntentSchema>
+
 export const SelfPayOrderConfirmationSchema = z.object({
   v: z.literal(1),
   number: z.number().int().positive(),
@@ -111,10 +205,11 @@ export const deriveSelfPayMenuItemKey = (catalogItemId: string): string =>
 
 const deriveMenuVersion = (
   currency: SelfPayMenu["currency"],
+  written: boolean,
   categories: SelfPayMenu["categories"]
 ) =>
   bytesToHex(
-    sha256(utf8ToBytes(JSON.stringify([currency, categories]))).slice(
+    sha256(utf8ToBytes(JSON.stringify([currency, written, categories]))).slice(
       0,
       MENU_VERSION_BYTES
     )
@@ -122,15 +217,24 @@ const deriveMenuVersion = (
 
 const createMenu = (
   currency: SelfPayMenu["currency"],
+  written: boolean,
   categories: SelfPayMenu["categories"]
 ): SelfPayMenu => ({
   v: 1,
-  version: deriveMenuVersion(currency, categories),
+  version: deriveMenuVersion(currency, written, categories),
   currency,
+  written,
   categories,
 })
 
-export const MENU_DAY_END_HOUR = 4
+export const DEFAULT_MENU_DAY_END_HOUR = 4
+
+export const menuDayEndHourOf = (
+  settings: Pick<AppSettingsRow, "menuDayEndHour"> | undefined
+): number => {
+  const hour = settings?.menuDayEndHour ?? null
+  return hour !== null && hour < 24 ? hour : DEFAULT_MENU_DAY_END_HOUR
+}
 
 export const menuDayEndAfter = (now: Date, hour: number): Date => {
   const today = set(now, {
@@ -143,20 +247,25 @@ export const menuDayEndAfter = (now: Date, hour: number): Date => {
 }
 
 export const isOfferedInMenu = (
-  item: Pick<CatalogItemRow, "inMenu" | "soldOut">
-): boolean => item.inMenu !== null && item.soldOut === null
+  item: Pick<CatalogItemRow, "inMenu" | "inMenuUntil" | "soldOut">,
+  now: Date
+): boolean => isInMenu(item, now) && item.soldOut === null
 
 export const buildSelfPayMenu = ({
   items,
   categories,
   currency,
+  written,
+  now,
 }: {
   readonly items: ReadonlyArray<CatalogItemRow>
   readonly categories: ReadonlyArray<CatalogCategoryRow>
   readonly currency: SelfPayMenu["currency"]
+  readonly written: boolean
+  readonly now: Date
 }): SelfPayMenu => {
   const offered = items.filter(
-    (item) => isOfferedInMenu(item) && item.currency === currency
+    (item) => isOfferedInMenu(item, now) && item.currency === currency
   )
   const toMenuItem = (item: CatalogItemRow): SelfPayMenuItem => ({
     key: deriveSelfPayMenuItemKey(item.id),
@@ -176,7 +285,7 @@ export const buildSelfPayMenu = ({
   const uncategorized = offered.filter(
     ({ categoryId }) => categoryId === null || !categoryIds.has(categoryId)
   )
-  return createMenu(currency, [
+  return createMenu(currency, written, [
     ...inCategories,
     ...(uncategorized.length === 0
       ? []
@@ -201,7 +310,11 @@ const takeMenuItems = (
 
 export const fitSelfPayMenuIntoEvent = (menu: SelfPayMenu): SelfPayMenu => {
   const withItems = (count: number) =>
-    createMenu(menu.currency, takeMenuItems(menu.categories, count))
+    createMenu(
+      menu.currency,
+      menu.written,
+      takeMenuItems(menu.categories, count)
+    )
   const fits = (candidate: SelfPayMenu) =>
     encryptSelfPayContent(new Uint8Array(32), z.encode(MenuJson, candidate))
       .length <= MENU_CONTENT_BUDGET
@@ -272,6 +385,68 @@ export const createSelfPayOrderSelectionText = ({
     items,
     note,
   } satisfies SelfPayOrderSelection)
+
+export const isWrittenAmountInRange = (
+  amount: number,
+  currency: SelfPayMenu["currency"]
+): boolean => amount >= selfPayMinimum(currency) && amount <= MAX_WRITTEN_AMOUNT
+
+export interface WrittenOrder {
+  readonly text: string
+  readonly arrived: Money
+  readonly named: Money
+}
+
+export interface WrittenOrderColumns {
+  readonly currency: FiatCurrency
+  readonly writtenAmount: number | null
+  readonly writtenText: string | null
+  readonly writtenArrived: number | null
+}
+
+export const writtenOrderOf = ({
+  currency,
+  writtenAmount,
+  writtenText,
+  writtenArrived,
+}: WrittenOrderColumns): WrittenOrder | null =>
+  writtenAmount === null || writtenText === null || writtenArrived === null
+    ? null
+    : {
+        text: writtenText,
+        arrived: { value: Integer(writtenArrived), currency },
+        named: { value: Integer(writtenAmount), currency },
+      }
+
+export const createSelfPayWrittenSelectionText = ({
+  tablePublicKey,
+  menu,
+  lines,
+}: {
+  readonly tablePublicKey: string
+  readonly menu: Pick<SelfPayMenu, "version">
+  readonly lines: ReadonlyArray<WrittenOrderLine>
+}): string =>
+  JSON.stringify({
+    v: 1,
+    kind: "written",
+    nonce: createSelfPaySelectionNonce(),
+    table: tablePublicKey,
+    menu: menu.version,
+    lines,
+  } satisfies SelfPayWrittenSelection)
+
+export const fillWrittenOrderLines = (
+  named: ReadonlyArray<number>,
+  covered: number
+): ReadonlyArray<number> => {
+  let left = covered
+  return named.map((amount) => {
+    const filled = Math.min(amount, Math.max(0, left))
+    left -= filled
+    return filled
+  })
+}
 
 export const createSelfPayMenuFilter = ({
   publicKey,

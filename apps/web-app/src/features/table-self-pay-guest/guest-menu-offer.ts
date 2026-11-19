@@ -8,14 +8,25 @@ import {
 } from "@payky/core/modules/table-self-pay/table-self-pay-guest-utils"
 import type { SelfPayView } from "@payky/core/modules/table-self-pay/table-self-pay-view-utils"
 
-export const guestOrderableMenu = (
+export interface GuestMenuOffer {
+  readonly orderable: SelfPayMenu | null
+  readonly writable: SelfPayMenu | null
+}
+
+export const guestMenuOffer = (
   view: SelfPayView,
   menu: SelfPayMenu | null,
   rate: SelfPaySignedRate | null
-): SelfPayMenu | null =>
-  menu !== null &&
-  countSelfPayMenuItems(menu) > 0 &&
-  (findSelfPayBank(view, menu) !== null ||
-    (view.lightning !== null && rate !== null))
-    ? menu
-    : null
+): GuestMenuOffer => {
+  if (
+    menu === null ||
+    (findSelfPayBank(view, menu) === null &&
+      (view.lightning === null || rate === null))
+  ) {
+    return { orderable: null, writable: null }
+  }
+  return {
+    orderable: countSelfPayMenuItems(menu) > 0 ? menu : null,
+    writable: menu.written ? menu : null,
+  }
+}

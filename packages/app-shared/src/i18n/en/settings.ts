@@ -649,6 +649,7 @@ export const enSettings = {
     "This item is a discount: the amount is taken off the bill. Whether an item is a discount is set only when it is added.",
   "catalog.items.form.discount.label": "Discount",
   "catalog.items.form.inMenu.label": "In the menu",
+  "catalog.items.form.inMenu.until": "Leaves the menu at {time}",
   "catalog.items.form.internalDescription.invalid":
     "Internal description is too long (255 characters max).",
   "catalog.items.form.internalDescription.label": "Internal description",
@@ -1189,6 +1190,19 @@ export const enSettings = {
   "catalog.tables.selfPayOptions.orderDevice.placeholder": "Choose a device",
   "catalog.tables.selfPayOptions.orderDevice.this": "{name} (this device)",
   "catalog.tables.selfPayOptions.payBill": "Guests pay the table's bill",
+  "catalog.tables.selfPayOptions.written": "Guests write what they pay for",
+  "catalog.tables.selfPayOptions.written.dayEnd.description":
+    "Staff can put a guest's written item in the menu for the day. It leaves the menu at this hour.",
+  "catalog.tables.selfPayOptions.written.dayEnd.label":
+    "Items remembered for the day leave the menu at",
+  "catalog.tables.selfPayOptions.written.description":
+    "A guest at a table writes what they pay for item by item, each with its own amount. {appName} checks only that the money arrived. Each written item gets the tax rate below. If you pay VAT, staff can change it until they accept the order.",
+  "catalog.tables.selfPayOptions.written.taxRate.label":
+    "Default tax rate of a written item",
+  "catalog.tables.selfPayOptions.written.taxRate.missing.description":
+    "As a VAT payer, pick the default tax rate of a written item. Until then, guests can't write.",
+  "catalog.tables.selfPayOptions.written.taxRate.missing.title":
+    "Guests can't write yet",
   "catalog.tables.selfPayOptions.title": "QR codes on tables",
   "catalog.tables.selfPayOptions.withQrCode":
     "Tables with a QR code: {count} of {total}",
@@ -1314,6 +1328,7 @@ export const enSettings = {
   "access.action.confirmPaidDespiteCancellation":
     "Mark the canceled payment as paid",
   "access.action.createItem": "Create a catalog item",
+  "access.action.rememberItem": "Put a guest's item in the menu",
   "access.action.disable": "Turn access control off",
   "access.action.exportDatabase": "Export the app database",
   "access.action.revealRecoveryPhrase": "Reveal the recovery phrase",

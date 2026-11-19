@@ -9,7 +9,8 @@ import { View } from "tamagui"
 import { toast } from "tamagui/unstyled"
 import { waitingOrdersNoticeHeightAtom } from "../../atoms/toast.ts"
 import { useEvoluQuery } from "../../hooks/use-evolu-query.ts"
-import { useTranslation } from "../../hooks/use-translation.ts"
+import { useLocale, useTranslation } from "../../hooks/use-translation.ts"
+import { formatMoney } from "../../lib/format-money.ts"
 import { Toast } from "../ui/toast.tsx"
 
 const WAITING_ORDERS_TOAST_ID = "menu-orders-waiting"
@@ -24,12 +25,18 @@ export function MenuOrderAnnouncer() {
 
 function WaitingOrdersToast() {
   const { t } = useTranslation()
+  const locale = useLocale()
   const onOrders = usePathname() === "/orders"
   const { data: orders } = useEvoluQuery(menuOrdersToServeQuery)
   const { data: tables } = useEvoluQuery(tablesQuery)
   const notice = onOrders
     ? null
-    : waitingMenuOrdersNotice({ orders, tables, t })
+    : waitingMenuOrdersNotice({
+        orders,
+        tables,
+        t,
+        formatMoney: (money) => formatMoney(money, locale),
+      })
   const shown = notice !== null
   const setNoticeHeight = useSetAtom(waitingOrdersNoticeHeightAtom)
 

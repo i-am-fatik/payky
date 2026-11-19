@@ -9,6 +9,7 @@ import {
   updateCatalogItemErrorKeys,
 } from "@payky/app-shared/catalog-item-form-schema"
 import { fiatCurrencyOptions } from "@payky/app-shared/fiat-currency-options"
+import { formatTime } from "@payky/app-shared/format-date"
 import {
   optionalIdCodec,
   optionalTextCodec,
@@ -32,6 +33,7 @@ import {
   findCatalogItemsByScanCode,
   getStaffDisplayName,
   isDiscountPrice,
+  isInMenu,
 } from "@payky/core/modules/catalog-item/catalog-item-utils"
 import { taxRatesQuery } from "@payky/core/modules/tax-rate/tax-rate-queries"
 import type { TaxRateId } from "@payky/core/modules/tax-rate/tax-rate-types"
@@ -76,7 +78,7 @@ import { useHardwareScanner } from "../../../hooks/use-hardware-scanner.ts"
 import { useInlineChoice } from "../../../hooks/use-inline-choice.ts"
 import { useIsConfirmOpen } from "../../../hooks/use-is-confirm-open.ts"
 import { useRunToast } from "../../../hooks/use-run-toast.ts"
-import { useTranslation } from "../../../hooks/use-translation.ts"
+import { useLocale, useTranslation } from "../../../hooks/use-translation.ts"
 import { CategoryCombobox } from "../../shared/category-combobox.tsx"
 import { ItemLibraryPicture } from "../../shared/item-library-picture.tsx"
 import { useCatalogItemOptions } from "../../shared/use-catalog-item-options.ts"
@@ -422,7 +424,8 @@ function EditCatalogItemForm({ item }: { readonly item: CatalogItemRow }) {
 function CatalogItemMenuCard({ item }: { readonly item: CatalogItemRow }) {
   const { t } = useTranslation()
   const runToast = useRunToast()
-  const inMenu = useInlineChoice(item.inMenu !== null, (checked) =>
+  const locale = useLocale()
+  const inMenu = useInlineChoice(isInMenu(item, new Date()), (checked) =>
     runToast(async (run) => {
       await run.ok(setCatalogItemInMenu({ id: item.id, inMenu: checked }))
     })
@@ -453,9 +456,16 @@ function CatalogItemMenuCard({ item }: { readonly item: CatalogItemRow }) {
           />
           <FieldContent>
             <FieldLabel>{t("catalog.items.form.inMenu.label")}</FieldLabel>
+            {inMenu.value && item.inMenuUntil !== null && (
+              <FieldDescription>
+                {t("catalog.items.form.inMenu.until", {
+                  time: formatTime(new Date(item.inMenuUntil), locale),
+                })}
+              </FieldDescription>
+            )}
           </FieldContent>
         </Field>
-        {item.inMenu !== null && (
+        {isInMenu(item, new Date()) && (
           <Field orientation="horizontal">
             <Switch
               aria-label={t("catalog.items.form.soldOut.label")}

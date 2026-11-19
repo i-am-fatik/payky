@@ -25,8 +25,8 @@ the till sit above the bar too.
 
 - Keeping the notice over the screen (`menu-ordering/0014`). Staff could not
   charge a sale while an order waited.
-- A fixed room under every screen. A notice that names a long table wraps,
-  and a room of one line would leave it covering the screen again.
+- A fixed room under every screen. A written order's notice carries the
+  guest's text and wraps, and a one-line notice would leave a gap.
 - The notice at the top of the screen. It would cover the header and Back
   instead.
 

@@ -5,6 +5,7 @@ import {
   FiatCurrencySchema,
   type InferTable,
   NonEmptyString255Schema,
+  NonNegativeIntegerSchema,
   SqliteTrueSchema,
   TimestampMsSchema,
 } from "../shared/schema.ts"
@@ -48,7 +49,10 @@ export const appSettings = {
   selfPayGuestName: NonEmptyString255Schema.nullable(),
   selfPayBillsHidden: SqliteTrueSchema.nullable(),
   menuOrdering: SqliteTrueSchema.nullable(),
+  writtenOrders: SqliteTrueSchema.nullable(),
+  writtenOrderTaxRateId: TaxRateId.nullable(),
   orderDeviceId: DeviceId.nullable(),
+  menuDayEndHour: NonNegativeIntegerSchema.nullable(),
 } as const
 
 export type AppSettingsRow = InferTable<typeof appSettings>

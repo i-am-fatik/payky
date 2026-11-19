@@ -1,24 +1,45 @@
 import { sqliteTrue } from "@evolu/common"
 import {
+  NO_OPTION,
+  nonNegativeIntegerCodec,
   optionalIdCodec,
   optionalTextCodec,
 } from "@payky/app-shared/inline-edit-codecs"
 import {
+  setMenuDayEndHour,
   setMenuOrdering,
   setOrderDevice,
   setSelfPayBillsHidden,
+  setWrittenOrders,
+  setWrittenOrderTaxRate,
   updateSettings,
 } from "@payky/core/modules/app-settings/app-settings-actions"
 import { selfPaySettingsQuery } from "@payky/core/modules/app-settings/app-settings-queries"
+import { remembersWrittenItems } from "@payky/core/modules/app-settings/app-settings-utils"
 import { devicesQuery } from "@payky/core/modules/device/device-queries"
 import type { DeviceId } from "@payky/core/modules/device/device-types"
+import { legalEntityQuery } from "@payky/core/modules/legal-entity/legal-entity-queries"
+import { isVatPayer } from "@payky/core/modules/legal-entity/legal-entity-utils"
 import { loadSelfPayMenu } from "@payky/core/modules/menu-order/menu-order-actions"
-import { countSelfPayMenuItems } from "@payky/core/modules/menu-order/menu-order-utils"
+import {
+  countSelfPayMenuItems,
+  menuDayEndHourOf,
+} from "@payky/core/modules/menu-order/menu-order-utils"
 import { evoluHistoryMaxRowidQuery } from "@payky/core/modules/shared/evolu-history-queries"
-import type { NonEmptyString255 } from "@payky/core/modules/shared/schema"
+import {
+  type NonEmptyString255,
+  NonNegativeInteger,
+} from "@payky/core/modules/shared/schema"
 import { tablesQuery } from "@payky/core/modules/table/table-queries"
+import { taxRatesQuery } from "@payky/core/modules/tax-rate/tax-rate-queries"
+import type { TaxRateId } from "@payky/core/modules/tax-rate/tax-rate-types"
+import {
+  filterSelectableTaxRates,
+  formatTaxRateLabel,
+} from "@payky/core/modules/tax-rate/tax-rate-utils"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { set } from "date-fns"
 import { useAtomValue } from "jotai"
 import { TriangleAlertIcon } from "lucide-react"
 import { accountAtom } from "@/atoms/account.ts"
@@ -45,9 +66,12 @@ import { InlineEditSelect } from "@/features/shared/forms/inline-edit-select.tsx
 import { InlineEditSwitch } from "@/features/shared/forms/inline-edit-switch.tsx"
 import { useAppRun } from "@/hooks/use-app-run.ts"
 import { useEvoluQuery } from "@/hooks/use-evolu-query.ts"
+import { useLocale } from "@/hooks/use-locale.ts"
 import { useTranslation } from "@/hooks/use-translation.ts"
+import { formatTime } from "@/lib/format-utils.ts"
 
 const deviceCodec = optionalIdCodec<DeviceId>()
+const taxRateCodec = optionalIdCodec<TaxRateId>()
 
 export function SelfPayOptionsCard() {
   const { t } = useTranslation()
@@ -83,7 +107,10 @@ function SelfPayOptions() {
   } = useEvoluQuery(selfPaySettingsQuery)
   const billPaying = settings?.selfPayBillsHidden !== sqliteTrue
   const menuOrdering = settings?.menuOrdering === sqliteTrue
-  const optionsOn = [billPaying, menuOrdering].filter((on) => on).length
+  const writtenOrders = settings?.writtenOrders === sqliteTrue
+  const optionsOn = [billPaying, menuOrdering, writtenOrders].filter(
+    (on) => on
+  ).length
   const isLastOn = (on: boolean) => on && optionsOn === 1
   const guestsHaveNoPaymentMethod = useGuestsHaveNoPaymentMethod()
   const bankReachesGuests = useBankReachesGuests()
@@ -101,6 +128,11 @@ function SelfPayOptions() {
   const saveMenuOrdering = async (on: boolean) => {
     await using run = appRun()
     await run.ok(setMenuOrdering({ on, deviceId: thisDeviceId }))
+  }
+
+  const saveWrittenOrders = async (on: boolean) => {
+    await using run = appRun()
+    await run.ok(setWrittenOrders({ on, deviceId: thisDeviceId }))
   }
 
   return (
@@ -135,7 +167,23 @@ function SelfPayOptions() {
       />
       {isLastOn(menuOrdering) && <LastGuestOptionNote />}
       {menuOrdering && <MenuStatus />}
-      {menuOrdering && (
+      <InlineEditSwitch
+        label={t("catalog.tables.selfPayOptions.written")}
+        description={t("catalog.tables.selfPayOptions.written.description")}
+        defaultValue={writtenOrders}
+        disabled={isLastOn(writtenOrders)}
+        onSave={saveWrittenOrders}
+      />
+      {isLastOn(writtenOrders) && <LastGuestOptionNote />}
+      {writtenOrders && (
+        <WrittenOrderTaxRateSelect
+          taxRateId={settings?.writtenOrderTaxRateId ?? null}
+        />
+      )}
+      {remembersWrittenItems(settings) && (
+        <MenuDayEndSelect hour={menuDayEndHourOf(settings)} />
+      )}
+      {(menuOrdering || writtenOrders) && (
         <OrderDeviceSelect orderDeviceId={settings?.orderDeviceId ?? null} />
       )}
       {bankReachesGuests && (
@@ -155,6 +203,90 @@ function LastGuestOptionNote() {
     <p className="-mt-2 text-xs text-muted-foreground">
       {t("catalog.tables.selfPayOptions.lastOn")}
     </p>
+  )
+}
+
+function WrittenOrderTaxRateSelect({
+  taxRateId,
+}: {
+  readonly taxRateId: TaxRateId | null
+}) {
+  const { t } = useTranslation()
+  const appRun = useAppRun()
+  const { data: taxRates } = useEvoluQuery(taxRatesQuery)
+  const {
+    data: [legalEntity],
+  } = useEvoluQuery(legalEntityQuery)
+
+  const save = async (id: TaxRateId | null) => {
+    await using run = appRun()
+    await run.ok(setWrittenOrderTaxRate(id))
+  }
+
+  return (
+    <>
+      <InlineEditSelect
+        label={t("catalog.tables.selfPayOptions.written.taxRate.label")}
+        defaultValue={taxRateId}
+        codec={taxRateCodec}
+        options={[
+          { value: NO_OPTION, label: t("catalog.items.form.taxRate.none") },
+          ...filterSelectableTaxRates(taxRates, taxRateId).map((rate) => ({
+            value: rate.id,
+            label: `${formatTaxRateLabel(rate)}${
+              rate.deactivatedAt !== null
+                ? ` — ${t("settings.taxRates.archived.title")}`
+                : ""
+            }`,
+          })),
+        ]}
+        onSave={save}
+      />
+      {taxRateId === null && isVatPayer(legalEntity) && (
+        <Alert variant="warning">
+          <TriangleAlertIcon />
+          <AlertTitle className="line-clamp-none">
+            {t("catalog.tables.selfPayOptions.written.taxRate.missing.title")}
+          </AlertTitle>
+          <AlertDescription>
+            {t(
+              "catalog.tables.selfPayOptions.written.taxRate.missing.description"
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+    </>
+  )
+}
+
+function MenuDayEndSelect({ hour }: { readonly hour: number }) {
+  const { t } = useTranslation()
+  const locale = useLocale()
+  const appRun = useAppRun()
+  const today = new Date()
+
+  const save = async (next: NonNegativeInteger) => {
+    await using run = appRun()
+    await run.ok(setMenuDayEndHour(next))
+  }
+
+  return (
+    <InlineEditSelect
+      label={t("catalog.tables.selfPayOptions.written.dayEnd.label")}
+      description={t(
+        "catalog.tables.selfPayOptions.written.dayEnd.description"
+      )}
+      defaultValue={NonNegativeInteger(hour)}
+      codec={nonNegativeIntegerCodec}
+      options={Array.from({ length: 24 }, (_, option) => ({
+        value: String(option),
+        label: formatTime(
+          set(today, { hours: option, minutes: 0, seconds: 0 }),
+          locale
+        ),
+      }))}
+      onSave={save}
+    />
   )
 }
 

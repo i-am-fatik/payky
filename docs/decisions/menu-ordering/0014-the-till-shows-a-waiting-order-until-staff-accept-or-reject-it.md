@@ -16,7 +16,8 @@ While an order waits for the staff, that is no device has accepted or rejected
 it, every device of the account shows one notice at the bottom of every screen
 but "To serve". It does not time out, and it cannot be swiped or tapped away.
 For one waiting order it names the order as the announcement did: its number
-and table. For more it counts them. Its "Open" button opens "To serve", which lists the orders
+and table, and for a written order the money and the guest's text. For more it
+counts them. Its "Open" button opens "To serve", which lists the orders
 themselves, so the notice stays off that screen. Once a device accepts or
 rejects the last waiting order, the notice leaves every device as the change
 reaches it.
@@ -44,3 +45,4 @@ acceptance reaches it. An accepted order waits for "Served" with no notice.
 - `packages/app-shared/src/menu-order-announcement.test.ts > waitingMenuOrdersNotice > names the one order waiting for the staff by number and table`
 - `packages/app-shared/src/menu-order-announcement.test.ts > waitingMenuOrdersNotice > counts the orders when more wait for the staff`
 - `apps/web-app/e2e/menu-orders.spec.ts > a paid order is announced, listed to serve and served`
+- `apps/web-app/e2e/written-orders.spec.ts > staff see New order 1 · Bar · $90.00 · 2x pivo, accept it and mark it served, and the guest sees both and hides it`

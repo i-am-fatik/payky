@@ -52,12 +52,15 @@ import {
   deriveMenuOrderBillId,
   loadMenuOrderArrivalRows,
   loadSelfPayMenuVersion,
+  loadWrittenOrderLines,
   type MenuOrderArrivalRows,
+  raiseWrittenOrderLines,
+  type WrittenOrderRest,
 } from "../menu-order/menu-order-actions.ts"
 import { menuOrderByBillIdQuery } from "../menu-order/menu-order-queries.ts"
 import {
-  type SelfPayOrderSelection,
-  SelfPayOrderSelectionSchema,
+  type SelfPayOrderIntent,
+  SelfPayOrderIntentSchema,
 } from "../menu-order/menu-order-utils.ts"
 import { activeMonetaPluginsQuery } from "../moneta-plugin/moneta-plugin-queries.ts"
 import type { SelfPayPaymentRows } from "../payment/payment-row-actions.ts"
@@ -209,6 +212,7 @@ interface SelfPayArrival {
   readonly rows: SelfPayPaymentRows
   readonly allocations: ReadonlyArray<SelfPayAllocationWrite>
   readonly order: MenuOrderArrivalRows | null
+  readonly writtenOrderRest: ReadonlyArray<WrittenOrderRest> | null
 }
 
 interface SelfPaySelectionAllocation {
@@ -458,6 +462,7 @@ const creditSelfPayArrival =
       rows,
       allocations: allocationWrites(rows.payment.id, bill.id, allocation.lines),
       order: null,
+      writtenOrderRest: null,
     })
   }
 
@@ -477,7 +482,7 @@ const allocationWrites = (
   }))
 
 interface MenuOrderIntent {
-  readonly selection: SelfPayOrderSelection
+  readonly selection: SelfPayOrderIntent
   readonly currency: FiatCurrency
 }
 
@@ -486,6 +491,11 @@ type SelfPayTarget =
       readonly type: "bill"
       readonly bill: SelfPayBill
       readonly selection: SelfPayShareSelection | null
+    }
+  | {
+      readonly type: "writtenOrderRest"
+      readonly bill: SelfPayBill
+      readonly writtenAmount: number
     }
   | { readonly type: "newOrder"; readonly intent: MenuOrderIntent }
   | { readonly type: "waiting" }
@@ -501,7 +511,7 @@ const loadMenuOrderIntent =
   ): Task<MenuOrderIntent | null, never, SelfPayArrivalDeps> =>
   async (run) => {
     const answer = await run.ok(
-      lookUpSelfPaySelection(pointer, SelfPayOrderSelectionSchema)
+      lookUpSelfPaySelection(pointer, SelfPayOrderIntentSchema)
     )
     if (answer.type !== "found") return ok(null)
     const { selection } = answer
@@ -547,7 +557,14 @@ const resolveSelfPayTarget =
       if (recorded !== undefined && recorded.rejectedAt !== null) {
         return ok(null)
       }
-      if (bill !== null) return ok({ type: "bill", bill, selection: null })
+      const writtenAmount = recorded?.writtenAmount ?? null
+      if (bill !== null) {
+        return ok(
+          writtenAmount === null
+            ? { type: "bill", bill, selection: null }
+            : { type: "writtenOrderRest", bill, writtenAmount }
+        )
+      }
       if (recorded !== undefined) return ok(null)
       const intent = await run.ok(loadMenuOrderIntent(pointer))
       return ok(
@@ -597,6 +614,7 @@ const creditMenuOrderArrival =
         pointer,
         reference,
         selection: intent.selection,
+        arrived: amount,
         deviceId,
         root: tableSelfPayRoot,
       })
@@ -627,6 +645,56 @@ const creditMenuOrderArrival =
         ? allocationWrites(rows.payment.id, order.bill.bill.id, order.lines)
         : [],
       order,
+      writtenOrderRest: null,
+    })
+  }
+
+const creditWrittenOrderRest =
+  ({
+    transaction,
+    bill,
+    writtenAmount,
+    amount,
+    pointer,
+    ...method
+  }: Pick<SelfPayPaymentRows, "iban" | "spark"> & {
+    readonly transaction: SelfPayTransaction
+    readonly bill: SelfPayBill
+    readonly writtenAmount: number
+    readonly amount: number
+    readonly pointer: SelfPayPointer
+  }): Task<SelfPayArrival | null, never, EvoluDep> =>
+  async (run) => {
+    const coveredBefore = await run.ok(
+      loadSelfPayCoveredBefore(bill, transaction)
+    )
+    if (
+      !meetsSelfPayMinimum({
+        amount,
+        remainder: Math.max(0, writtenAmount - coveredBefore),
+        currency: bill.currency,
+      })
+    ) {
+      return ok(null)
+    }
+    return ok({
+      rows: selfPayPaymentRows({
+        transaction,
+        bill,
+        amount,
+        tipAmount: 0,
+        pointer,
+        ...method,
+      }),
+      allocations: [],
+      order: null,
+      writtenOrderRest: raiseWrittenOrderLines({
+        lines: await run.ok(
+          loadWrittenOrderLines({ billId: bill.id, pointer })
+        ),
+        coveredBefore,
+        amount,
+      }),
     })
   }
 
@@ -652,6 +720,16 @@ const creditSelfPayTarget =
       )
     }
     if (arrival.pointer === null) return ok(null)
+    if (target.type === "writtenOrderRest") {
+      return run(
+        creditWrittenOrderRest({
+          ...arrival,
+          pointer: arrival.pointer,
+          bill: target.bill,
+          writtenAmount: target.writtenAmount,
+        })
+      )
+    }
     return run(
       creditMenuOrderArrival({
         ...arrival,

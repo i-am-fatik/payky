@@ -157,8 +157,8 @@ test("one way for guests to use the QR code stays on", async ({
   const payBill = page.getByRole("switch", {
     name: translate("en", "catalog.tables.selfPayOptions.payBill"),
   })
-  const ordering = page.getByRole("switch", {
-    name: translate("en", "catalog.tables.selfPayOptions.order"),
+  const written = page.getByRole("switch", {
+    name: translate("en", "catalog.tables.selfPayOptions.written"),
   })
   const lastOn = page.getByText(
     translate("en", "catalog.tables.selfPayOptions.lastOn")
@@ -176,13 +176,13 @@ test("one way for guests to use the QR code stays on", async ({
     await expect(lastOn).toBeVisible()
   })
 
-  await test.step("with ordering on, paying the bill switches off and ordering stays on", async () => {
-    await toggleInlineSwitch(page, "catalog.tables.selfPayOptions.order")
+  await test.step("with writing on, paying the bill switches off and writing stays on", async () => {
+    await toggleInlineSwitch(page, "catalog.tables.selfPayOptions.written")
     await expect(payBill).toBeEnabled()
     await expect(lastOn).toBeHidden()
     await toggleInlineSwitch(page, "catalog.tables.selfPayOptions.payBill")
-    await expect(ordering).toBeChecked()
-    await expect(ordering).toBeDisabled()
+    await expect(written).toBeChecked()
+    await expect(written).toBeDisabled()
     await expect(lastOn).toBeVisible()
   })
 })

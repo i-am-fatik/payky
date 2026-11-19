@@ -333,6 +333,22 @@ export const skBill = {
   "selfPay.unavailable.description":
     "Skúste to o chvíľu znova alebo sa obráťte na obsluhu.",
   "selfPay.unavailable.title": "Stránka stola teraz nie je dostupná",
+  "selfPay.written.amount.label": "Suma",
+  "selfPay.written.amount.missing": "Doplňte sumu.",
+  "selfPay.written.amount.missing.item": "Doplňte sumu pri položke {number}",
+  "selfPay.written.amount.tooHigh": "Najväčšia suma je {amount}.",
+  "selfPay.written.amount.tooLow": "Najmenšia suma je {amount}.",
+  "selfPay.written.add": "Pridať ďalšiu položku",
+  "selfPay.written.back": "Späť k písaniu",
+  "selfPay.written.nothing": "Napíšte, čo platíte, a sumu",
+  "selfPay.written.onBill": "Platíte niečo, čo už je na účte stola?",
+  "selfPay.written.onBill.open": "Zaplatiť v Účte",
+  "selfPay.written.remove": "Odobrať položku {number}",
+  "selfPay.written.summary": "Platíte {amount}",
+  "selfPay.written.tab": "Napísať",
+  "selfPay.written.text.label": "Čo platíte?",
+  "selfPay.written.text.unreadable":
+    "Text obsahuje znak, ktorý sa nedá zobraziť. Napíšte ho, prosím, znova.",
   "selfPay.waiting": "Reštaurácia platbu potvrdí, keď peniaze dorazia.",
   "selfPay.waiting.over.announcement": "{title}. {description}",
   "selfPay.waiting.over.description":

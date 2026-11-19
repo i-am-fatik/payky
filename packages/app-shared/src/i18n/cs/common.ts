@@ -110,6 +110,10 @@ export const csCommon = {
   "orders.accept": "Přijmout",
   "orders.announced": "Nová objednávka {number} · {table}",
   "orders.announced.noTable": "Nová objednávka {number}",
+  "orders.announced.written":
+    "Nová objednávka {number} · {table} · {amount} · {text}",
+  "orders.announced.written.noTable":
+    "Nová objednávka {number} · {amount} · {text}",
   "orders.announced.open": "Otevřít",
   "orders.empty": "Není co vydat.",
   "orders.line": "{quantity}× {name}",
@@ -134,6 +138,13 @@ export const csCommon = {
   "orders.reject.description":
     "Peníze se hostovi samy nevrátí. Po odmítnutí pokladna otevře, co host zaplatil, a vrácení tam zaznamenáte.",
   "orders.reject.title": "Odmítnout objednávku {number}?",
+  "orders.remember.description":
+    "Hosté si ji mohou objednat z menu do {time}. Název i cenu můžete změnit.",
+  "orders.remember.forGood.description":
+    "Hosté si ji od teď mohou objednat z menu každý den. Název i cenu můžete změnit.",
+  "orders.remember.forGood.title": "Přidat „{text}“ do menu natrvalo",
+  "orders.remember.save": "Dát do menu",
+  "orders.remember.title": "Zapamatovat „{text}“ na dnešek",
   "orders.served": "Vydat",
   "orders.served.empty": "Dnes zatím nic vydáno.",
   "orders.soldOut": "Vyprodáno",
@@ -142,6 +153,16 @@ export const csCommon = {
   "orders.title": "K vydání",
   "orders.waiting": "Čekající objednávky: {count}",
   "orders.waiting.badge": "Nové",
+  "orders.written": "Text hosta: „{text}“",
+  "orders.written.arrivedOf": "{arrived} z {named}",
+  "orders.written.addForGood": "Přidat do menu natrvalo",
+  "orders.written.keepForGood": "Ponechat v menu natrvalo",
+  "orders.written.remember": "Zapamatovat na dnešek",
+  "orders.written.remembered": "V menu do {time}",
+  "orders.written.taxRate": "Sazba DPH položky „{text}“",
+  "orders.written.taxRate.locked":
+    "Objednávka je přijatá, sazby už nejde změnit.",
+  "orders.written.total": "Celkem {amount}",
   "passwordTextarea.hide": "Skrýt obsah",
   "passwordTextarea.show": "Zobrazit obsah",
   "scanner.dialog.title": "Naskenovat kód",
@@ -190,6 +211,7 @@ export const csCommon = {
   "stats.items.metric": "Řadit položky",
   "stats.items.quantity": "{quantity} ×",
   "stats.items.showAll": "Zobrazit vše",
+  "stats.items.written": "Psané objednávky",
   "stats.items.showTop": "Zobrazit prvních 10",
   "stats.kpi.averageSale": "Průměrný prodej",
   "stats.kpi.breakdown.excess": "Přebytek",

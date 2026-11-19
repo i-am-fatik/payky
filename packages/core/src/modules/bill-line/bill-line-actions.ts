@@ -4,14 +4,17 @@ import type { EvoluOwnerDep } from "../../deps.ts"
 import type { BillId } from "../bill/bill-types.ts"
 import type { ItemRow } from "../item/item.ts"
 import { itemsByBillIdQuery } from "../item/item-queries.ts"
+import type { ItemId } from "../item/item-types.ts"
 import type { EvoluDep } from "../shared/evolu-deps.ts"
 import {
   removeUndefinedValues,
   runMutationWithCompletion,
 } from "../shared/evolu-utils.ts"
+import type { NonNegativeInteger } from "../shared/schema.ts"
 import type { BillLineRow } from "./bill-line.ts"
 import { billLinesByBillIdQuery } from "./bill-line-queries.ts"
 import type { BillLineSummary } from "./bill-line-summary.ts"
+import type { BillLineId } from "./bill-line-types.ts"
 import { calculateBillLineSummaries } from "./bill-line-utils.ts"
 
 /**
@@ -37,6 +40,24 @@ export const upsertBillLineRows = (
   for (const line of lines) {
     evolu.upsert("billLine", removeUndefinedValues(line), options)
   }
+}
+
+export const updateBillLineTotal = (
+  evolu: EvoluDep["evolu"],
+  id: BillLineId,
+  totalAmount: NonNegativeInteger,
+  options: MutationOptions
+): void => {
+  evolu.update("billLine", { id, totalAmount }, options)
+}
+
+export const updateBillLineItem = (
+  evolu: EvoluDep["evolu"],
+  id: BillLineId,
+  itemId: ItemId,
+  options: MutationOptions
+): void => {
+  evolu.update("billLine", { id, itemId }, options)
 }
 
 /**
